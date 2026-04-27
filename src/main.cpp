@@ -49,6 +49,7 @@ struct NPC {
     bool hasBounds;
     glm::vec3 boundsMin;
     glm::vec3 boundsMax;
+    int floor; // 1 = Ground Floor, 2 = Balcony Floor
 };
 std::vector<NPC> npcList;
 
@@ -69,21 +70,22 @@ struct Waypoint {
     glm::vec3 lookAt;
 };
 
+// Updated tour points to utilize the continuous 2nd floor corridor loop!
 std::vector<Waypoint> tourPoints = {
     {{0.0f, 1.5f, 28.0f}, {0.0f, 1.5f, 10.0f}},    // Entrance
     {{0.0f, 1.5f, 10.0f}, {-10.0f, 3.0f, 10.0f}},  // Center, pan left
     {{0.0f, 1.5f, 0.0f},  {10.0f, 3.0f, 0.0f}},    // Center, pan right
-    {{0.0f, 1.5f, -2.0f}, {0.0f, 6.5f, -10.0f}},   // Base of escalator
-    {{2.0f, 6.5f, -8.0f}, {-6.0f, 6.5f, -8.0f}},   // Top of escalator
-    {{-6.0f, 6.5f, -8.0f}, {-6.0f, 6.5f, 0.0f}},   // Left balcony
-    {{-6.0f, 6.5f, 10.0f}, {0.0f, 1.5f, 5.0f}},    // Look down at plants
-    {{-6.0f, 6.5f, 20.0f}, {0.0f, 10.0f, 10.0f}},  // Look up at skylight
-    {{-6.0f, 6.5f, -8.0f}, {6.0f, 6.5f, -8.0f}},   // Cross bridge
-    {{6.0f, 6.5f, -8.0f}, {6.0f, 6.5f, 0.0f}},     // Right balcony
-    {{6.0f, 6.5f, 10.0f}, {0.0f, 1.5f, 5.0f}},     // Right look down
-    {{6.0f, 6.5f, -8.0f}, {0.0f, 6.5f, -8.0f}},    // Back to escalator
-    {{-2.0f, 6.5f, -8.0f}, {0.0f, 1.5f, 0.0f}},    // Go down escalator
-    {{0.0f, 1.5f, -2.0f}, {0.0f, 1.5f, 25.0f}}     // Look at entrance
+    {{-1.5f, 1.5f, -2.0f}, {-1.5f, 6.5f, -10.0f}}, // Base of escalator (up lane)
+    {{-1.5f, 6.5f, -10.0f}, {-6.0f, 6.5f, -10.0f}},// Top of escalator on bridge
+    {{-4.5f, 6.5f, -10.0f}, {-4.5f, 6.5f, 0.0f}},  // Left balcony corridor start
+    {{-4.5f, 6.5f, 10.0f}, {0.0f, 1.5f, 5.0f}},    // Look down at plants
+    {{-4.5f, 6.5f, 20.0f}, {4.5f, 6.5f, 20.0f}},   // Move to back bridge
+    {{0.0f,  6.5f, 20.0f}, {0.0f, 10.0f, 10.0f}},  // Center back bridge look skylight
+    {{4.5f,  6.5f, 20.0f}, {4.5f, 6.5f, 0.0f}},    // Right balcony corridor
+    {{4.5f,  6.5f, 10.0f}, {0.0f, 1.5f, 5.0f}},    // Right look down
+    {{4.5f,  6.5f, -10.0f}, {1.5f, 6.5f, -10.0f}}, // Back to front landing bridge
+    {{1.5f,  6.5f, -10.0f}, {1.5f, 1.5f, -2.0f}},  // Top of escalator (down lane)
+    {{1.5f,  1.5f, -2.0f}, {0.0f, 1.5f, 28.0f}}    // Base of escalator look entrance
 };
 
 void updateTour(float dt) {
@@ -198,7 +200,6 @@ vec3 CalcDirLight(vec3 normal, vec3 viewDir, vec3 albedo, float specStr, float s
     vec3 reflectDir = reflect(-lightDir, normal);
     float spec = pow(max(dot(viewDir, reflectDir), 0.0), shiny);
     
-    // Slightly lowered ambient to restore 3D depth and shadows to white objects
     vec3 ambient  = 0.45 * dirLightColor * albedo;
     vec3 diffuse  = diff * dirLightColor * albedo;
     vec3 specular = specStr * spec * dirLightColor;
@@ -212,11 +213,8 @@ vec3 CalcPointLight(int i, vec3 normal, vec3 fragPos, vec3 viewDir, vec3 albedo,
     float spec = pow(max(dot(viewDir, reflectDir), 0.0), shiny);
     
     float distance = length(pointLightPositions[i] - fragPos);
-    
-    // Gentler attenuation so light reaches further into the corridors
     float attenuation = 1.0 / (1.0 + 0.045 * distance + 0.0075 * (distance * distance));    
     
-    // Point light ambient contribution
     vec3 ambient  = 0.15 * pointLightColors[i] * albedo;
     vec3 diffuse  = diff * pointLightColors[i] * albedo;
     vec3 specular = specStr * spec * pointLightColors[i];
@@ -297,43 +295,120 @@ void mouse_callback(GLFWwindow* window, double xposIn, double yposIn) {
     cameraFront = normalize(front);
 }
 
-// Simple Collision Map
-bool isPositionValid(float x, float z) {
-    // Main Corridor
-    if (x > -5.8f && x < 5.8f && z > -28.0f && z < 28.0f) return true;
+// ---------------------------------------------------------
+// Strict 3D Collision Map (SOLID WALLS & RAILINGS)
+// ---------------------------------------------------------
+bool isPositionValid(float x, float y, float z) {
+    // Determine if on the escalator ramp
+    bool onEscalator = (x >= -3.0f && x <= 3.0f && z >= -8.5f && z <= 0.5f);
     
-    // Open Shops Interior
-    for (int sz = -20; sz <= 20; sz += 10) {
-        // Left Shop Area (Doors are between sz-1.5 to sz+1.5)
-        if (x >= -14.0f && x <= -5.8f && z > sz - 3.8f && z < sz + 3.8f) {
-            // Doorway restriction (Glass panes act as walls)
-            if (x > -6.5f && (z < sz - 1.5f || z > sz + 1.5f)) return false; 
-            if (x > -11.5f && x < -8.5f && z > sz - 1.0f && z < sz + 1.0f) return false; // Table
-            if (x < -13.2f) return false; // Shelves
-            return true; 
+    // --- ELEVATION AND VOID PROTECTION ---
+    if (y > 4.0f && !onEscalator) {
+        // Must be standing on a valid 2nd Floor surface to avoid falling in the void
+        bool valid2F = false;
+        if (x <= -3.0f && x >= -14.0f) valid2F = true; // Left balcony corridor & shops
+        if (x >= 3.0f && x <= 14.0f) valid2F = true; // Right balcony corridor & shops
+        if (x > -3.0f && x < 3.0f && z <= -8.0f && z >= -12.0f) valid2F = true; // Front Bridge
+        if (x > -3.0f && x < 3.0f && z <= 22.0f && z >= 18.0f) valid2F = true; // Back Bridge
+
+        if (!valid2F) return false; 
+
+        // 2nd Floor Glass Railings (Physical barriers)
+        // Left side continuous railing
+        if (x > -3.3f && x < -2.9f) {
+            if (z < -12.0f) return false;
+            if (z > -8.0f && z < 18.0f) return false;
+            if (z > 22.0f) return false;
         }
-        // Right Shop Area
-        if (x >= 5.8f && x <= 14.0f && z > sz - 3.8f && z < sz + 3.8f) {
-            // Doorway restriction
-            if (x < 6.5f && (z < sz - 1.5f || z > sz + 1.5f)) return false;
-            if (x > 8.5f && x < 11.5f && z > sz - 1.0f && z < sz + 1.0f) return false; // Table
-            if (x > 13.2f) return false; // Shelves
-            return true;
+        // Right side continuous railing
+        if (x > 2.9f && x < 3.3f) {
+            if (z < -12.0f) return false;
+            if (z > -8.0f && z < 18.0f) return false;
+            if (z > 22.0f) return false;
+        }
+        // Bridge guardrails
+        if (z > -12.1f && z < -11.7f && x > -3.0f && x < 3.0f) return false; // Front bridge back
+        if (z > 21.7f && z < 22.1f && x > -3.0f && x < 3.0f) return false; // Back bridge back
+        if (z > 17.9f && z < 18.3f && x > -3.0f && x < 3.0f) return false; // Back bridge front
+
+    } else if (y < 4.0f && !onEscalator) {
+        // 1st Floor Area - Block the solid side rails of the escalator, leaving lanes open
+        if (x > -3.2f && x < -2.0f && z > -8.2f && z < 0.2f) return false; // Left rail
+        if (x >  2.0f && x <  3.2f && z > -8.2f && z < 0.2f) return false; // Right rail
+        if (x > -0.5f && x <  0.5f && z > -8.2f && z < 0.2f) return false; // Center divider
+    }
+
+    // --- SOLID SHOP WALLS AND OBSTACLES ---
+    for (int sz = -20; sz <= 20; sz += 10) {
+        bool fullyOpen = (sz % 20 == 0); // Every other shop is fully open layout
+        
+        // Grand Pillars Collision
+        if (x > -6.2f && x < -5.4f && z > sz + 4.4f && z < sz + 5.2f) return false;
+        if (x >  5.4f && x <  6.2f && z > sz + 4.4f && z < sz + 5.2f) return false;
+
+        // ONLY CHECK WALLS IF WE ARE STANDING NEAR THIS SPECIFIC SHOP
+        // (This prevents the infinite glass wall projection bug!)
+        if (z > sz - 5.0f && z < sz + 5.0f) {
+            // Left Side Shops
+            if (x < -5.5f) {
+                // Solid Side walls between shops
+                if (z > sz - 4.1f && z < sz - 3.7f) return false;
+                if (z > sz + 3.7f && z < sz + 4.1f) return false;
+                // Back wall of shop
+                if (x < -13.7f) return false;
+                
+                // Glass Front Wall (if not an open layout)
+                if (!fullyOpen && x > -6.5f && x < -5.5f) {
+                    if (z < sz - 1.2f || z > sz + 1.2f) return false; 
+                }
+                
+                // Interior objects
+                if (x > -11.8f && x < -8.2f && z > sz - 1.3f && z < sz + 1.3f) return false; // Center display table
+            }
+            
+            // Right Side Shops
+            if (x > 5.5f) {
+                // Solid Side walls between shops
+                if (z > sz - 4.1f && z < sz - 3.7f) return false;
+                if (z > sz + 3.7f && z < sz + 4.1f) return false;
+                // Back wall of shop
+                if (x > 13.7f) return false;
+                
+                // Glass Front Wall
+                if (!fullyOpen && x < 6.5f && x > 5.5f) {
+                    if (z < sz - 1.2f || z > sz + 1.2f) return false;
+                }
+                
+                // Interior objects
+                if (x > 8.2f && x < 11.8f && z > sz - 1.3f && z < sz + 1.3f) return false; // Center display table
+            }
         }
     }
-    return false;
+    
+    // Absolute limits of the mall structure
+    if (z < -28.0f || z > 28.0f) return false;
+    if (x < -14.0f || x > 14.0f) return false;
+
+    return true;
 }
 
-float getFloorHeight(float x, float z) {
-    // Escalator Bounds
-    if (x > -3.0f && x < 3.0f && z > -8.0f && z < 0.0f) {
-        float normalizedZ = (0.0f - z) / 8.0f; 
+float getFloorHeight(float x, float currentY, float z) {
+    // Escalator Ramp
+    if (x >= -3.0f && x <= 3.0f && z >= -8.5f && z <= 0.5f) {
+        float clampedZ = glm::clamp(z, -8.0f, 0.0f);
+        float normalizedZ = (0.0f - clampedZ) / 8.0f; 
         return 1.5f + (normalizedZ * 5.0f); 
     }
-    // 2nd Floor
-    if (cameraPos.y > 4.0f) {
-        if (x < -3.0f || x > 3.0f || z < -25.0f || z > 25.0f) return 6.5f; 
+    
+    // 2nd Floor (Includes the balconies and bridges)
+    if (currentY > 4.0f) {
+        if (x <= -3.0f || x >= 3.0f || 
+           (x > -3.0f && x < 3.0f && z <= -8.0f && z >= -12.0f) || 
+           (x > -3.0f && x < 3.0f && z <= 22.0f && z >= 18.0f)) {
+            return 6.5f; 
+        }
     }
+    
     return 1.5f; 
 }
 
@@ -371,8 +446,8 @@ void processInput(GLFWwindow *window) {
         float dx = moveDir.x * cameraSpeed;
         float dz = moveDir.z * cameraSpeed;
         
-        if (isPositionValid(cameraPos.x + dx, cameraPos.z)) cameraPos.x += dx;
-        if (isPositionValid(cameraPos.x, cameraPos.z + dz)) cameraPos.z += dz;
+        if (isPositionValid(cameraPos.x + dx, cameraPos.y, cameraPos.z)) cameraPos.x += dx;
+        if (isPositionValid(cameraPos.x, cameraPos.y, cameraPos.z + dz)) cameraPos.z += dz;
     }
 
     if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS && isGrounded) {
@@ -383,7 +458,7 @@ void processInput(GLFWwindow *window) {
     velocityY -= gravity * deltaTime;
     cameraPos.y += velocityY * deltaTime;
 
-    float currentFloorHeight = getFloorHeight(cameraPos.x, cameraPos.z);
+    float currentFloorHeight = getFloorHeight(cameraPos.x, cameraPos.y, cameraPos.z);
     if (cameraPos.y <= currentFloorHeight) {
         cameraPos.y = currentFloorHeight;
         velocityY = 0.0f;
@@ -411,9 +486,7 @@ void drawBox(unsigned int shader, unsigned int VAO, glm::vec3 position, glm::vec
 // Draws a detailed humanoid NPC
 void drawMan(unsigned int shader, unsigned int VAO, glm::vec3 pos, float rotY, glm::vec4 shirtColor, bool isWalking, float time) {
     float swing = isWalking ? sin(time * 12.0f) * 35.0f : 0.0f;
-    // Darkened skin tone for better contrast
     glm::vec4 skin = glm::vec4(0.8f, 0.6f, 0.45f, 1.0f);
-    
     glm::vec4 pants = glm::vec4(0.25f, 0.25f, 0.3f, 1.0f);
 
     // Torso
@@ -447,7 +520,7 @@ void drawMan(unsigned int shader, unsigned int VAO, glm::vec3 pos, float rotY, g
     model = glm::mat4(1.0f);
     model = glm::translate(model, pos + glm::vec3(-0.35f, 1.6f, 0.0f));
     model = glm::rotate(model, glm::radians(rotY), glm::vec3(0.0f, 1.0f, 0.0f));
-    model = glm::rotate(model, glm::radians(-swing), glm::vec3(1.0f, 0.0f, 0.0f)); // Opposite to left leg
+    model = glm::rotate(model, glm::radians(-swing), glm::vec3(1.0f, 0.0f, 0.0f)); 
     model = glm::translate(model, glm::vec3(0.0f, -0.35f, 0.0f));
     model = glm::scale(model, glm::vec3(0.15f, 0.7f, 0.15f));
     glUniformMatrix4fv(glGetUniformLocation(shader, "model"), 1, GL_FALSE, glm::value_ptr(model));
@@ -458,7 +531,7 @@ void drawMan(unsigned int shader, unsigned int VAO, glm::vec3 pos, float rotY, g
     model = glm::mat4(1.0f);
     model = glm::translate(model, pos + glm::vec3(0.35f, 1.6f, 0.0f));
     model = glm::rotate(model, glm::radians(rotY), glm::vec3(0.0f, 1.0f, 0.0f));
-    model = glm::rotate(model, glm::radians(swing), glm::vec3(1.0f, 0.0f, 0.0f)); // Opposite to right leg
+    model = glm::rotate(model, glm::radians(swing), glm::vec3(1.0f, 0.0f, 0.0f)); 
     model = glm::translate(model, glm::vec3(0.0f, -0.35f, 0.0f));
     model = glm::scale(model, glm::vec3(0.15f, 0.7f, 0.15f));
     glUniformMatrix4fv(glGetUniformLocation(shader, "model"), 1, GL_FALSE, glm::value_ptr(model));
@@ -466,19 +539,14 @@ void drawMan(unsigned int shader, unsigned int VAO, glm::vec3 pos, float rotY, g
 }
 
 void drawShopInterior(unsigned int shader, unsigned int VAO, glm::vec3 center, bool isLeft) {
-    // Central display table (Wood)
     drawBox(shader, VAO, center + glm::vec3(0.0f, 0.4f, 0.0f), glm::vec3(3.0f, 0.8f, 2.0f), glm::vec4(0.5f, 0.3f, 0.2f, 1.0f), 0.0f, 3);
-    
-    // Featured Products
     drawBox(shader, VAO, center + glm::vec3(-1.0f, 0.9f, 0.0f), glm::vec3(0.4f), glm::vec4(1.0f, 0.2f, 0.2f, 1.0f));
     drawBox(shader, VAO, center + glm::vec3( 0.0f, 0.9f, 0.0f), glm::vec3(0.3f, 0.6f, 0.3f), glm::vec4(0.2f, 1.0f, 0.2f, 1.0f));
     drawBox(shader, VAO, center + glm::vec3( 1.0f, 0.9f, 0.0f), glm::vec3(0.5f, 0.2f, 0.5f), glm::vec4(0.2f, 0.5f, 1.0f, 1.0f));
     
-    // Back wall shelves (Wood)
     float backX = isLeft ? center.x - 3.5f : center.x + 3.5f;
     drawBox(shader, VAO, glm::vec3(backX, 2.0f, center.z), glm::vec3(0.8f, 4.0f, 6.0f), glm::vec4(0.4f, 0.25f, 0.15f, 1.0f), 0.0f, 3);
     
-    // Items on shelves
     for(int i=-2; i<=2; i+=2) {
         float shelfZ = center.z + i;
         float itemX = backX + (isLeft ? 0.4f : -0.4f);
@@ -489,11 +557,8 @@ void drawShopInterior(unsigned int shader, unsigned int VAO, glm::vec3 center, b
 }
 
 void drawPlanterTree(unsigned int shader, unsigned int VAO, glm::vec3 pos) {
-    // Planter Box (Wood)
     drawBox(shader, VAO, pos + glm::vec3(0.0f, 0.3f, 0.0f), glm::vec3(1.5f, 0.6f, 1.5f), glm::vec4(0.3f, 0.2f, 0.1f, 1.0f), 0.0f, 3);
-    // Trunk
     drawBox(shader, VAO, pos + glm::vec3(0.0f, 1.5f, 0.0f), glm::vec3(0.2f, 2.0f, 0.2f), glm::vec4(0.4f, 0.25f, 0.1f, 1.0f), 0.0f, 3);
-    // Leaves (Overlapping boxes)
     drawBox(shader, VAO, pos + glm::vec3(0.0f, 2.5f, 0.0f), glm::vec3(1.8f, 1.0f, 1.8f), glm::vec4(0.15f, 0.5f, 0.15f, 1.0f));
     drawBox(shader, VAO, pos + glm::vec3(0.0f, 3.2f, 0.0f), glm::vec3(1.2f, 1.0f, 1.2f), glm::vec4(0.2f, 0.6f, 0.2f, 1.0f));
 }
@@ -524,9 +589,6 @@ int main() {
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    
-    // REMOVED: glCullFace(GL_BACK) and glEnable(GL_CULL_FACE). 
-    // The generic cube vertices have mixed winding orders causing entire objects to render transparently!
 
     float vertices[] = {
         // positions          // normals
@@ -561,7 +623,6 @@ int main() {
     glLinkProgram(shaderProgram);
     glDeleteShader(vertexShader); glDeleteShader(fragmentShader);
 
-    // Warm, realistic indoor mall lights
     glm::vec3 pointLightPositions[10];
     glm::vec3 pointLightColors[10];
     int lightIdx = 0;
@@ -576,19 +637,54 @@ int main() {
 
     srand((unsigned int)time(NULL));
     
-    // Shoppers
+    // Shoppers (Free-roaming - Properly assigned to floors to prevent edge falls)
     for(int i=0; i<15; i++) {
         NPC npc;
-        npc.pos = glm::vec3(randFloat(-3.0f, 3.0f), 0.0f, randFloat(-25.0f, 25.0f));
+        npc.floor = (rand() % 2 == 0) ? 1 : 2; // Assign safely to floor 1 or 2
+        float startY = (npc.floor == 1) ? 1.5f : 6.5f;
+        // Use the new widened corridors for spawning
+        float startX = (npc.floor == 1) ? randFloat(-3.0f, 3.0f) : ((rand()%2==0) ? randFloat(-10.0f, -4.0f) : randFloat(4.0f, 10.0f));
+
+        npc.pos = glm::vec3(startX, startY, randFloat(-25.0f, 25.0f));
         npc.target = npc.pos;
         npc.speed = randFloat(1.5f, 3.0f);
-        // Reduced the max lightness range so their clothes have proper color/contrast against walls
         npc.color = glm::vec4(randFloat(0.1f, 0.7f), randFloat(0.1f, 0.7f), randFloat(0.2f, 0.8f), 1.0f);
         npc.rotY = 0.0f;
         npc.waitTimer = randFloat(0.0f, 2.0f);
         npc.isWalking = true;
         npc.hasBounds = false;
         npcList.push_back(npc);
+    }
+    
+    // Shopkeepers (Bounded behind tables)
+    for (int z = -20; z <= 20; z += 10) {
+        for(float y : {0.0f, 5.0f}) { 
+            NPC skL;
+            skL.pos = glm::vec3(-12.0f, y, z);
+            skL.target = skL.pos;
+            skL.speed = randFloat(1.0f, 2.0f);
+            skL.color = glm::vec4(0.8f, 0.4f, 0.1f, 1.0f);
+            skL.rotY = 90.0f;
+            skL.waitTimer = randFloat(0.0f, 2.0f);
+            skL.isWalking = false;
+            skL.hasBounds = true; 
+            skL.boundsMin = glm::vec3(-12.8f, y, z - 2.0f); 
+            skL.boundsMax = glm::vec3(-11.8f, y, z + 2.0f);
+            npcList.push_back(skL);
+
+            NPC skR;
+            skR.pos = glm::vec3(12.0f, y, z);
+            skR.target = skR.pos;
+            skR.speed = randFloat(1.0f, 2.0f);
+            skR.color = glm::vec4(0.8f, 0.4f, 0.1f, 1.0f);
+            skR.rotY = -90.0f;
+            skR.waitTimer = randFloat(0.0f, 2.0f);
+            skR.isWalking = false;
+            skR.hasBounds = true; 
+            skR.boundsMin = glm::vec3(11.8f, y, z - 2.0f); 
+            skR.boundsMax = glm::vec3(12.8f, y, z + 2.0f);
+            npcList.push_back(skR);
+        }
     }
 
     std::cout << "--- NEXT-GEN VIRTUAL MALL ---" << std::endl;
@@ -603,10 +699,8 @@ int main() {
 
         processInput(window);
 
-        // Night sky 
         glClearColor(0.01f, 0.01f, 0.03f, 1.0f); 
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
         glUseProgram(shaderProgram);
 
         glUniform3fv(glGetUniformLocation(shaderProgram, "viewPos"), 1, glm::value_ptr(cameraPos));
@@ -615,7 +709,6 @@ int main() {
         glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
         glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "view"), 1, GL_FALSE, glm::value_ptr(view));
 
-        // Ambient Skylight
         glUniform3f(glGetUniformLocation(shaderProgram, "dirLightDir"), -0.2f, -1.0f, -0.3f);
         glUniform3f(glGetUniformLocation(shaderProgram, "dirLightColor"), 0.5f, 0.5f, 0.6f);
 
@@ -637,82 +730,83 @@ int main() {
         // 1. DRAW OPAQUE/SOLID OBJECTS FIRST
         // ==========================================
         
-        // Polished Marble Floor (matType 1)
+        // Ground Floor
         drawBox(shaderProgram, VAO, glm::vec3(0.0f, -0.25f, 0.0f), glm::vec3(40.0f, 0.5f, 60.0f), glm::vec4(0.8f, 0.8f, 0.85f, 1.0f), 0.0f, 1);
         
-        // 2nd Floor Balconies 
-        drawBox(shaderProgram, VAO, glm::vec3(-12.0f, 4.75f, 0.0f), glm::vec3(24.0f, 0.5f, 60.0f), glm::vec4(0.65f, 0.65f, 0.7f, 1.0f), 0.0f, 1);
-        drawBox(shaderProgram, VAO, glm::vec3( 12.0f, 4.75f, 0.0f), glm::vec3(24.0f, 0.5f, 60.0f), glm::vec4(0.65f, 0.65f, 0.7f, 1.0f), 0.0f, 1);
+        // 2nd Floor Balconies (Extended inward to x=3.0 to create a spacious 3.0-wide corridor)
+        drawBox(shaderProgram, VAO, glm::vec3(-8.5f, 4.75f, 0.0f), glm::vec3(11.0f, 0.5f, 60.0f), glm::vec4(0.65f, 0.65f, 0.7f, 1.0f), 0.0f, 1);
+        drawBox(shaderProgram, VAO, glm::vec3( 8.5f, 4.75f, 0.0f), glm::vec3(11.0f, 0.5f, 60.0f), glm::vec4(0.65f, 0.65f, 0.7f, 1.0f), 0.0f, 1);
         
-        // Solid End Walls (Darkened for contrast)
+        // Front Landing Bridge (Over Escalator)
+        drawBox(shaderProgram, VAO, glm::vec3(0.0f, 4.75f, -10.0f), glm::vec3(6.0f, 0.5f, 4.0f), glm::vec4(0.65f, 0.65f, 0.7f, 1.0f), 0.0f, 1);
+        // Back Connecting Bridge (Forms the full corridor loop)
+        drawBox(shaderProgram, VAO, glm::vec3(0.0f, 4.75f, 20.0f), glm::vec3(6.0f, 0.5f, 4.0f), glm::vec4(0.65f, 0.65f, 0.7f, 1.0f), 0.0f, 1);
+        
+        // Solid End Walls (Cool gray)
         drawBox(shaderProgram, VAO, glm::vec3(0.0f, 5.0f, -30.0f), glm::vec3(40.0f, 10.0f, 1.0f), glm::vec4(0.5f, 0.5f, 0.55f, 1.0f));
         drawBox(shaderProgram, VAO, glm::vec3(0.0f, 5.0f,  30.0f), glm::vec3(40.0f, 10.0f, 1.0f), glm::vec4(0.5f, 0.5f, 0.55f, 1.0f));
 
         // Ceiling Frame / Skylight Truss
         drawBox(shaderProgram, VAO, glm::vec3(-6.0f, 10.0f, 0.0f), glm::vec3(1.0f, 0.5f, 60.0f), glm::vec4(0.2f, 0.2f, 0.2f, 1.0f));
         drawBox(shaderProgram, VAO, glm::vec3( 6.0f, 10.0f, 0.0f), glm::vec3(1.0f, 0.5f, 60.0f), glm::vec4(0.2f, 0.2f, 0.2f, 1.0f));
-        for(int i=-25; i<=25; i+=5) { // Cross beams
+        for(int i=-25; i<=25; i+=5) {
             drawBox(shaderProgram, VAO, glm::vec3(0.0f, 10.0f, i), glm::vec3(12.0f, 0.4f, 0.4f), glm::vec4(0.15f, 0.15f, 0.15f, 1.0f));
         }
 
-        // Grand Dual Escalator (Solid Parts)
-        // Center Divider
+        // Grand Dual Escalator 
         drawBox(shaderProgram, VAO, glm::vec3(0.0f, 2.5f, -4.0f), glm::vec3(0.6f, 5.0f, 8.5f), glm::vec4(0.3f, 0.3f, 0.3f, 1.0f));
-        // Escalator Steps (Approximated as a slanted grooved block)
         for (int i = 0; i < 40; i++) {
             float height = i * 0.125f;
             float zOffset = 0.0f - (i * 0.2f);
-            // Up lane
             drawBox(shaderProgram, VAO, glm::vec3(-1.5f, height, zOffset), glm::vec3(2.4f, 0.2f, 0.3f), glm::vec4(0.1f, 0.1f, 0.1f, 1.0f));
-            // Down lane
             drawBox(shaderProgram, VAO, glm::vec3( 1.5f, height, zOffset), glm::vec3(2.4f, 0.2f, 0.3f), glm::vec4(0.1f, 0.1f, 0.1f, 1.0f));
         }
         
         // Draw Shops
         for (int z = -20; z <= 20; z += 10) {
-            for(float y : {0.0f, 5.0f}) { // Floor 1 and 2
-                // LEFT SHOP
+            bool fullyOpen = (z % 20 == 0); 
+            
+            for(float y : {0.0f, 5.0f}) { 
+                // LEFT SHOP (Walls set to soft beige for contrast)
                 glm::vec3 lPos(-10.0f, y + 2.5f, z);
-                // Shop solid walls (darkened for contrast)
-                drawBox(shaderProgram, VAO, lPos + glm::vec3(-3.9f, 0.0f, 0.0f), glm::vec3(0.2f, 5.0f, 8.0f), glm::vec4(0.55f, 0.55f, 0.6f, 1.0f)); 
-                drawBox(shaderProgram, VAO, lPos + glm::vec3(0.0f, 0.0f, -3.9f), glm::vec3(8.0f, 5.0f, 0.2f), glm::vec4(0.55f, 0.55f, 0.6f, 1.0f)); 
-                drawBox(shaderProgram, VAO, lPos + glm::vec3(0.0f, 0.0f, 3.9f),  glm::vec3(8.0f, 5.0f, 0.2f), glm::vec4(0.55f, 0.55f, 0.6f, 1.0f)); 
+                drawBox(shaderProgram, VAO, lPos + glm::vec3(-3.9f, 0.0f, 0.0f), glm::vec3(0.2f, 5.0f, 8.0f), glm::vec4(0.75f, 0.7f, 0.65f, 1.0f)); 
+                drawBox(shaderProgram, VAO, lPos + glm::vec3(0.0f, 0.0f, -3.9f), glm::vec3(8.0f, 5.0f, 0.2f), glm::vec4(0.75f, 0.7f, 0.65f, 1.0f)); 
+                drawBox(shaderProgram, VAO, lPos + glm::vec3(0.0f, 0.0f, 3.9f),  glm::vec3(8.0f, 5.0f, 0.2f), glm::vec4(0.75f, 0.7f, 0.65f, 1.0f)); 
                 
-                // Storefront Frame (Metal)
-                drawBox(shaderProgram, VAO, lPos + glm::vec3(4.0f, 0.0f, -2.5f), glm::vec3(0.2f, 5.0f, 3.0f), glm::vec4(0.2f, 0.2f, 0.2f, 1.0f)); // Left frame
-                drawBox(shaderProgram, VAO, lPos + glm::vec3(4.0f, 0.0f,  2.5f), glm::vec3(0.2f, 5.0f, 3.0f), glm::vec4(0.2f, 0.2f, 0.2f, 1.0f)); // Right frame
-                drawBox(shaderProgram, VAO, lPos + glm::vec3(4.0f, 2.0f,  0.0f), glm::vec3(0.2f, 1.0f, 8.0f), glm::vec4(0.2f, 0.2f, 0.2f, 1.0f)); // Top Header
+                if (!fullyOpen) {
+                    drawBox(shaderProgram, VAO, lPos + glm::vec3(4.0f, 0.0f, -2.5f), glm::vec3(0.2f, 5.0f, 3.0f), glm::vec4(0.2f, 0.2f, 0.2f, 1.0f)); 
+                    drawBox(shaderProgram, VAO, lPos + glm::vec3(4.0f, 0.0f,  2.5f), glm::vec3(0.2f, 5.0f, 3.0f), glm::vec4(0.2f, 0.2f, 0.2f, 1.0f)); 
+                }
+                drawBox(shaderProgram, VAO, lPos + glm::vec3(4.0f, 2.0f,  0.0f), glm::vec3(0.2f, 1.0f, 8.0f), glm::vec4(0.2f, 0.2f, 0.2f, 1.0f)); 
                 
-                // Emissive Neon Signs (matType 5)
                 glm::vec4 signColorL = glm::vec4(0.2f + abs(z%3)*0.4f, 0.8f, 0.9f - abs(z%4)*0.2f, 1.0f);
                 drawBox(shaderProgram, VAO, glm::vec3(-5.9f, y + 4.5f, z), glm::vec3(0.1f, 0.8f, 4.0f), signColorL, 0.0f, 5);
                 drawShopInterior(shaderProgram, VAO, glm::vec3(-10.0f, y, z), true);
 
-                // RIGHT SHOP
+                // RIGHT SHOP (Walls set to soft beige)
                 glm::vec3 rPos(10.0f, y + 2.5f, z);
-                drawBox(shaderProgram, VAO, rPos + glm::vec3(3.9f, 0.0f, 0.0f), glm::vec3(0.2f, 5.0f, 8.0f), glm::vec4(0.55f, 0.55f, 0.6f, 1.0f)); 
-                drawBox(shaderProgram, VAO, rPos + glm::vec3(0.0f, 0.0f, -3.9f), glm::vec3(8.0f, 5.0f, 0.2f), glm::vec4(0.55f, 0.55f, 0.6f, 1.0f)); 
-                drawBox(shaderProgram, VAO, rPos + glm::vec3(0.0f, 0.0f, 3.9f),  glm::vec3(8.0f, 5.0f, 0.2f), glm::vec4(0.55f, 0.55f, 0.6f, 1.0f)); 
+                drawBox(shaderProgram, VAO, rPos + glm::vec3(3.9f, 0.0f, 0.0f), glm::vec3(0.2f, 5.0f, 8.0f), glm::vec4(0.75f, 0.7f, 0.65f, 1.0f)); 
+                drawBox(shaderProgram, VAO, rPos + glm::vec3(0.0f, 0.0f, -3.9f), glm::vec3(8.0f, 5.0f, 0.2f), glm::vec4(0.75f, 0.7f, 0.65f, 1.0f)); 
+                drawBox(shaderProgram, VAO, rPos + glm::vec3(0.0f, 0.0f, 3.9f),  glm::vec3(8.0f, 5.0f, 0.2f), glm::vec4(0.75f, 0.7f, 0.65f, 1.0f)); 
                 
-                // Storefront Frame
-                drawBox(shaderProgram, VAO, rPos + glm::vec3(-4.0f, 0.0f, -2.5f), glm::vec3(0.2f, 5.0f, 3.0f), glm::vec4(0.2f, 0.2f, 0.2f, 1.0f));
-                drawBox(shaderProgram, VAO, rPos + glm::vec3(-4.0f, 0.0f,  2.5f), glm::vec3(0.2f, 5.0f, 3.0f), glm::vec4(0.2f, 0.2f, 0.2f, 1.0f));
+                if (!fullyOpen) {
+                    drawBox(shaderProgram, VAO, rPos + glm::vec3(-4.0f, 0.0f, -2.5f), glm::vec3(0.2f, 5.0f, 3.0f), glm::vec4(0.2f, 0.2f, 0.2f, 1.0f));
+                    drawBox(shaderProgram, VAO, rPos + glm::vec3(-4.0f, 0.0f,  2.5f), glm::vec3(0.2f, 5.0f, 3.0f), glm::vec4(0.2f, 0.2f, 0.2f, 1.0f));
+                }
                 drawBox(shaderProgram, VAO, rPos + glm::vec3(-4.0f, 2.0f,  0.0f), glm::vec3(0.2f, 1.0f, 8.0f), glm::vec4(0.2f, 0.2f, 0.2f, 1.0f));
                 
-                // Emissive Neon Signs
                 glm::vec4 signColorR = glm::vec4(0.9f, 0.3f + abs(z%2)*0.3f, 0.3f, 1.0f);
                 drawBox(shaderProgram, VAO, glm::vec3(5.9f, y + 4.5f, z), glm::vec3(0.1f, 0.8f, 4.0f), signColorR, 0.0f, 5);
                 drawShopInterior(shaderProgram, VAO, glm::vec3(10.0f, y, z), false);
             }
 
-            // Grand Pillars (Darkened for contrast)
-            drawBox(shaderProgram, VAO, glm::vec3(-5.8f, 5.0f, z + 4.8f), glm::vec3(0.6f, 10.0f, 0.6f), glm::vec4(0.65f, 0.65f, 0.7f, 1.0f), 0.0f, 1);
-            drawBox(shaderProgram, VAO, glm::vec3( 5.8f, 5.0f, z + 4.8f), glm::vec3(0.6f, 10.0f, 0.6f), glm::vec4(0.65f, 0.65f, 0.7f, 1.0f), 0.0f, 1);
+            // Pillars
+            drawBox(shaderProgram, VAO, glm::vec3(-5.8f, 5.0f, z + 4.8f), glm::vec3(0.6f, 10.0f, 0.6f), glm::vec4(0.55f, 0.55f, 0.6f, 1.0f), 0.0f, 1);
+            drawBox(shaderProgram, VAO, glm::vec3( 5.8f, 5.0f, z + 4.8f), glm::vec3(0.6f, 10.0f, 0.6f), glm::vec4(0.55f, 0.55f, 0.6f, 1.0f), 0.0f, 1);
 
-            // Ground Floor Centerpieces (Trees and Benches)
+            // Ground Floor Centerpieces
             if (z != 0 && z != -10) {
                 drawPlanterTree(shaderProgram, VAO, glm::vec3(0.0f, 0.0f, z));
-                // Benches
                 drawBox(shaderProgram, VAO, glm::vec3(0.0f, 0.4f, z + 2.0f), glm::vec3(2.0f, 0.1f, 0.6f), glm::vec4(0.4f, 0.2f, 0.1f, 1.0f), 0.0f, 3);
                 drawBox(shaderProgram, VAO, glm::vec3(0.0f, 0.4f, z - 2.0f), glm::vec3(2.0f, 0.1f, 0.6f), glm::vec4(0.4f, 0.2f, 0.1f, 1.0f), 0.0f, 3);
             }
@@ -728,12 +822,28 @@ int main() {
                 glm::vec3 dir = npc.target - npc.pos;
                 dir.y = 0.0f;
                 float dist = glm::length(dir);
+                
                 if(dist < 0.5f) {
-                    npc.target = glm::vec3(randFloat(-4.0f, 4.0f), 0.0f, randFloat(-25.0f, 25.0f));
-                    if (rand() % 4 == 0) { 
-                        float signX = (rand()%2 == 0) ? -8.0f : 8.0f;
-                        float shopZs[] = {-20, -10, 0, 10, 20};
-                        npc.target = glm::vec3(signX, 0.0f, shopZs[rand()%5]);
+                    if (npc.hasBounds) {
+                        npc.target = glm::vec3(randFloat(npc.boundsMin.x, npc.boundsMax.x), npc.pos.y, randFloat(npc.boundsMin.z, npc.boundsMax.z));
+                    } else {
+                        if (npc.floor == 1) {
+                            npc.target = glm::vec3(randFloat(-4.0f, 4.0f), 1.5f, randFloat(-25.0f, 25.0f));
+                            if (rand() % 4 == 0) { 
+                                float signX = (rand()%2 == 0) ? -8.0f : 8.0f;
+                                float shopZs[] = {-20, -10, 0, 10, 20};
+                                npc.target = glm::vec3(signX, 1.5f, shopZs[rand()%5]);
+                            }
+                        } else {
+                            bool isLeft = (npc.pos.x < 0.0f);
+                            float tX = isLeft ? randFloat(-10.0f, -4.0f) : randFloat(4.0f, 10.0f);
+                            npc.target = glm::vec3(tX, 6.5f, randFloat(-25.0f, 25.0f));
+                            if (rand() % 4 == 0) {
+                                float sX = isLeft ? -8.0f : 8.0f;
+                                float shopZs[] = {-20, -10, 0, 10, 20};
+                                npc.target = glm::vec3(sX, 6.5f, shopZs[rand()%5]);
+                            }
+                        }
                     }
                     npc.waitTimer = randFloat(1.0f, 3.0f);
                 } else {
@@ -741,17 +851,31 @@ int main() {
                     float dx = dir.x * npc.speed * deltaTime;
                     float dz = dir.z * npc.speed * deltaTime;
                     
-                    if (isPositionValid(npc.pos.x + dx, npc.pos.z + dz)) {
+                    if (isPositionValid(npc.pos.x + dx, npc.pos.y, npc.pos.z + dz)) {
                         npc.pos.x += dx;
                         npc.pos.z += dz;
                     } else {
-                        npc.target = glm::vec3(randFloat(-4.0f, 4.0f), 0.0f, randFloat(-25.0f, 25.0f));
-                        npc.waitTimer = randFloat(0.5f, 1.5f);
+                        npc.waitTimer = randFloat(0.5f, 1.5f); // Hit a wall, wait, then recalculate below
+                        if (npc.hasBounds) {
+                            npc.target = glm::vec3(randFloat(npc.boundsMin.x, npc.boundsMax.x), npc.pos.y, randFloat(npc.boundsMin.z, npc.boundsMax.z));
+                        } else {
+                            if (npc.floor == 1) {
+                                npc.target = glm::vec3(randFloat(-4.0f, 4.0f), 1.5f, randFloat(-25.0f, 25.0f));
+                            } else {
+                                bool isLeft = (npc.pos.x < 0.0f);
+                                float tX = isLeft ? randFloat(-10.0f, -4.0f) : randFloat(4.0f, 10.0f);
+                                npc.target = glm::vec3(tX, 6.5f, randFloat(-25.0f, 25.0f));
+                            }
+                        }
                     }
                     npc.rotY = glm::degrees(atan2(dir.x, dir.z));
                 }
             }
-            float renderY = getFloorHeight(npc.pos.x, npc.pos.z) - 1.5f; 
+            
+            float renderY = npc.pos.y;
+            if (!npc.hasBounds) {
+                renderY = getFloorHeight(npc.pos.x, npc.pos.y, npc.pos.z) - 1.5f; 
+            }
             drawMan(shaderProgram, VAO, glm::vec3(npc.pos.x, renderY, npc.pos.z), npc.rotY, npc.color, npc.isWalking, currentFrame);
         }
 
@@ -759,22 +883,38 @@ int main() {
         // 2. DRAW TRANSPARENT OBJECTS LAST (Crucial for Alpha Blending)
         // ==========================================
         
-        // Storefront Glass Panels (matType 2)
+        // Storefront Glass Panels 
         for (int z = -20; z <= 20; z += 10) {
-            for(float y : {0.0f, 5.0f}) { 
-                // Left glass
-                drawBox(shaderProgram, VAO, glm::vec3(-6.0f, y + 2.0f, z - 2.5f), glm::vec3(0.05f, 4.0f, 2.5f), glm::vec4(0.6f, 0.8f, 1.0f, 0.3f), 0.0f, 2);
-                drawBox(shaderProgram, VAO, glm::vec3(-6.0f, y + 2.0f, z + 2.5f), glm::vec3(0.05f, 4.0f, 2.5f), glm::vec4(0.6f, 0.8f, 1.0f, 0.3f), 0.0f, 2);
-                // Right glass
-                drawBox(shaderProgram, VAO, glm::vec3( 6.0f, y + 2.0f, z - 2.5f), glm::vec3(0.05f, 4.0f, 2.5f), glm::vec4(0.6f, 0.8f, 1.0f, 0.3f), 0.0f, 2);
-                drawBox(shaderProgram, VAO, glm::vec3( 6.0f, y + 2.0f, z + 2.5f), glm::vec3(0.05f, 4.0f, 2.5f), glm::vec4(0.6f, 0.8f, 1.0f, 0.3f), 0.0f, 2);
+            bool fullyOpen = (z % 20 == 0); 
+            if (!fullyOpen) {
+                for(float y : {0.0f, 5.0f}) { 
+                    // Left glass
+                    drawBox(shaderProgram, VAO, glm::vec3(-6.0f, y + 2.0f, z - 2.5f), glm::vec3(0.05f, 4.0f, 2.5f), glm::vec4(0.6f, 0.8f, 1.0f, 0.3f), 0.0f, 2);
+                    drawBox(shaderProgram, VAO, glm::vec3(-6.0f, y + 2.0f, z + 2.5f), glm::vec3(0.05f, 4.0f, 2.5f), glm::vec4(0.6f, 0.8f, 1.0f, 0.3f), 0.0f, 2);
+                    // Right glass
+                    drawBox(shaderProgram, VAO, glm::vec3( 6.0f, y + 2.0f, z - 2.5f), glm::vec3(0.05f, 4.0f, 2.5f), glm::vec4(0.6f, 0.8f, 1.0f, 0.3f), 0.0f, 2);
+                    drawBox(shaderProgram, VAO, glm::vec3( 6.0f, y + 2.0f, z + 2.5f), glm::vec3(0.05f, 4.0f, 2.5f), glm::vec4(0.6f, 0.8f, 1.0f, 0.3f), 0.0f, 2);
+                }
             }
         }
 
-        // Glass Railings for 2nd Floor Balcony
-        drawBox(shaderProgram, VAO, glm::vec3(-5.9f, 5.5f, 0.0f), glm::vec3(0.05f, 1.5f, 60.0f), glm::vec4(0.7f, 0.9f, 1.0f, 0.3f), 0.0f, 2);
-        drawBox(shaderProgram, VAO, glm::vec3( 5.9f, 5.5f, 0.0f), glm::vec3(0.05f, 1.5f, 60.0f), glm::vec4(0.7f, 0.9f, 1.0f, 0.3f), 0.0f, 2);
+        // Glass Railings for 2nd Floor Balcony - Segments to allow for the bridges!
+        // Left Side 
+        drawBox(shaderProgram, VAO, glm::vec3(-3.1f, 5.5f, -21.0f), glm::vec3(0.05f, 1.5f, 18.0f), glm::vec4(0.7f, 0.9f, 1.0f, 0.3f), 0.0f, 2);
+        drawBox(shaderProgram, VAO, glm::vec3(-3.1f, 5.5f,  5.0f), glm::vec3(0.05f, 1.5f, 26.0f), glm::vec4(0.7f, 0.9f, 1.0f, 0.3f), 0.0f, 2);
+        drawBox(shaderProgram, VAO, glm::vec3(-3.1f, 5.5f,  26.0f), glm::vec3(0.05f, 1.5f, 8.0f), glm::vec4(0.7f, 0.9f, 1.0f, 0.3f), 0.0f, 2);
+        // Right Side 
+        drawBox(shaderProgram, VAO, glm::vec3( 3.1f, 5.5f, -21.0f), glm::vec3(0.05f, 1.5f, 18.0f), glm::vec4(0.7f, 0.9f, 1.0f, 0.3f), 0.0f, 2);
+        drawBox(shaderProgram, VAO, glm::vec3( 3.1f, 5.5f,  5.0f), glm::vec3(0.05f, 1.5f, 26.0f), glm::vec4(0.7f, 0.9f, 1.0f, 0.3f), 0.0f, 2);
+        drawBox(shaderProgram, VAO, glm::vec3( 3.1f, 5.5f,  26.0f), glm::vec3(0.05f, 1.5f, 8.0f), glm::vec4(0.7f, 0.9f, 1.0f, 0.3f), 0.0f, 2);
         
+        // Front Landing Bridge Railings
+        drawBox(shaderProgram, VAO, glm::vec3(0.0f, 5.5f, -11.9f), glm::vec3(6.0f, 1.5f, 0.05f), glm::vec4(0.7f, 0.9f, 1.0f, 0.3f), 0.0f, 2); // Back edge
+
+        // Back Bridge Railings
+        drawBox(shaderProgram, VAO, glm::vec3(0.0f, 5.5f, 21.9f), glm::vec3(6.0f, 1.5f, 0.05f), glm::vec4(0.7f, 0.9f, 1.0f, 0.3f), 0.0f, 2); // Back edge
+        drawBox(shaderProgram, VAO, glm::vec3(0.0f, 5.5f, 18.1f), glm::vec3(6.0f, 1.5f, 0.05f), glm::vec4(0.7f, 0.9f, 1.0f, 0.3f), 0.0f, 2); // Front edge
+
         // Escalator Glass Sides
         drawBox(shaderProgram, VAO, glm::vec3(-2.8f, 3.5f, -4.0f), glm::vec3(0.1f, 7.0f, 8.5f), glm::vec4(0.7f, 0.9f, 1.0f, 0.3f), 0.0f, 2);
         drawBox(shaderProgram, VAO, glm::vec3( 2.8f, 3.5f, -4.0f), glm::vec3(0.1f, 7.0f, 8.5f), glm::vec4(0.7f, 0.9f, 1.0f, 0.3f), 0.0f, 2);
