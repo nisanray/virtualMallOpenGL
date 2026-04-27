@@ -1,0 +1,25 @@
+# Ignore Visual Studio and build artifacts
+/.vs/
+*.sln
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+VirtualMall/
+x64/
+[Dd]ebug/
+[Rr]elease/
+[Bb]uild/
+[Bb]in/
+*.exe
+*.ilk
+*.pdb
+*.tlog
+*.obj
+*.ipch
+*.db
+
+# Ignore VS Code settings
+.vscode/
+
+# Ignore downloaded tools
+bfg.jar
