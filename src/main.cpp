@@ -17,7 +17,7 @@ glm::vec3 cameraFront = glm::vec3(0.0f, 0.0f, -1.0f);
 glm::vec3 cameraUp    = glm::vec3(0.0f, 1.0f,  0.0f);
 
 bool firstMouse = true;
-float yaw   = -90.0f;	
+float yaw   = -90.0f;   
 float pitch =  0.0f;
 float lastX =  640.0f;
 float lastY =  360.0f;
@@ -59,7 +59,7 @@ float randFloat(float min, float max) {
 // ---------------------------------------------------------
 // Automated Cinematic Tour System
 // ---------------------------------------------------------
-bool tourMode = false; // Set to false so you can walk manually by default!
+bool tourMode = false; 
 bool tKeyPressed = false;
 float tourProgress = 0.0f;
 int currentWaypoint = 0;
@@ -69,37 +69,32 @@ struct Waypoint {
     glm::vec3 lookAt;
 };
 
-// Define the cinematic path through the mall
 std::vector<Waypoint> tourPoints = {
-    {{0.0f, 1.5f, 28.0f}, {0.0f, 1.5f, 10.0f}},    // 0: Entrance, looking in
-    {{0.0f, 1.5f, 10.0f}, {-10.0f, 3.0f, 10.0f}},  // 1: Center, pan left to shop
-    {{0.0f, 1.5f, 0.0f},  {10.0f, 3.0f, 0.0f}},    // 2: Center, pan right to shop
-    {{0.0f, 1.5f, -2.0f}, {0.0f, 6.5f, -10.0f}},   // 3: Base of stairs, looking up
-    {{0.0f, 6.5f, -8.0f}, {-6.0f, 6.5f, -8.0f}},   // 4: Top of stairs, looking left
-    {{-6.0f, 6.5f, -8.0f}, {-6.0f, 6.5f, 0.0f}},   // 5: Move onto left balcony
-    {{-6.0f, 6.5f, 10.0f}, {0.0f, 1.5f, 5.0f}},    // 6: Left balcony, looking down at central planters
-    {{-6.0f, 6.5f, 20.0f}, {0.0f, 10.0f, 10.0f}},  // 7: Left balcony end, looking up at skylight
-    {{-6.0f, 6.5f, -8.0f}, {6.0f, 6.5f, -8.0f}},   // 8: Back to stairs top, looking across to right side
-    {{6.0f, 6.5f, -8.0f}, {6.0f, 6.5f, 0.0f}},     // 9: Move onto right balcony
-    {{6.0f, 6.5f, 10.0f}, {0.0f, 1.5f, 5.0f}},     // 10: Right balcony, looking down
-    {{6.0f, 6.5f, -8.0f}, {0.0f, 6.5f, -8.0f}},    // 11: Back to stairs
-    {{0.0f, 6.5f, -8.0f}, {0.0f, 1.5f, 0.0f}},     // 12: Top of stairs looking down at ground floor
-    {{0.0f, 1.5f, -2.0f}, {0.0f, 1.5f, 25.0f}}     // 13: Base of stairs looking back at entrance
+    {{0.0f, 1.5f, 28.0f}, {0.0f, 1.5f, 10.0f}},    // Entrance
+    {{0.0f, 1.5f, 10.0f}, {-10.0f, 3.0f, 10.0f}},  // Center, pan left
+    {{0.0f, 1.5f, 0.0f},  {10.0f, 3.0f, 0.0f}},    // Center, pan right
+    {{0.0f, 1.5f, -2.0f}, {0.0f, 6.5f, -10.0f}},   // Base of escalator
+    {{2.0f, 6.5f, -8.0f}, {-6.0f, 6.5f, -8.0f}},   // Top of escalator
+    {{-6.0f, 6.5f, -8.0f}, {-6.0f, 6.5f, 0.0f}},   // Left balcony
+    {{-6.0f, 6.5f, 10.0f}, {0.0f, 1.5f, 5.0f}},    // Look down at plants
+    {{-6.0f, 6.5f, 20.0f}, {0.0f, 10.0f, 10.0f}},  // Look up at skylight
+    {{-6.0f, 6.5f, -8.0f}, {6.0f, 6.5f, -8.0f}},   // Cross bridge
+    {{6.0f, 6.5f, -8.0f}, {6.0f, 6.5f, 0.0f}},     // Right balcony
+    {{6.0f, 6.5f, 10.0f}, {0.0f, 1.5f, 5.0f}},     // Right look down
+    {{6.0f, 6.5f, -8.0f}, {0.0f, 6.5f, -8.0f}},    // Back to escalator
+    {{-2.0f, 6.5f, -8.0f}, {0.0f, 1.5f, 0.0f}},    // Go down escalator
+    {{0.0f, 1.5f, -2.0f}, {0.0f, 1.5f, 25.0f}}     // Look at entrance
 };
 
 void updateTour(float dt) {
     if (!tourMode) return;
-    
     float tourSpeed = 0.2f; 
     tourProgress += dt * tourSpeed;
-    
     if (tourProgress >= 1.0f) {
         tourProgress -= 1.0f;
         currentWaypoint = (currentWaypoint + 1) % tourPoints.size();
     }
-    
     int nextIndex = (currentWaypoint + 1) % tourPoints.size();
-    
     float t = tourProgress * tourProgress * (3.0f - 2.0f * tourProgress);
     
     Waypoint p1 = tourPoints[currentWaypoint];
@@ -114,7 +109,7 @@ void updateTour(float dt) {
 }
 
 // ---------------------------------------------------------
-// Advanced Shaders (Multi-Lighting & Alpha Blending)
+// Advanced Shaders (Procedural Materials & Lighting)
 // ---------------------------------------------------------
 const char* vertexShaderSource = R"(
 #version 330 core
@@ -123,12 +118,14 @@ layout (location = 1) in vec3 aNormal;
 
 out vec3 FragPos;
 out vec3 Normal;
+out vec3 LocalPos;
 
 uniform mat4 model;
 uniform mat4 view;
 uniform mat4 projection;
 
 void main() {
+    LocalPos = aPos;
     FragPos = vec3(model * vec4(aPos, 1.0));
     Normal = mat3(transpose(inverse(model))) * aNormal;  
     gl_Position = projection * view * vec4(FragPos, 1.0);
@@ -141,9 +138,11 @@ out vec4 FragColor;
 
 in vec3 FragPos;
 in vec3 Normal;
+in vec3 LocalPos;
 
 uniform vec3 viewPos;
-uniform vec4 objectColor; // xyzw (rgba)
+uniform vec4 objectColor; 
+uniform int matType; // 0=Solid, 1=Marble Floor, 2=Glass, 3=Wood, 4=Neon
 
 // Lights
 uniform vec3 dirLightDir;
@@ -160,38 +159,76 @@ uniform float spotCutOff;
 uniform float spotOuterCutOff;
 uniform bool flashlightOn;
 
-vec3 CalcDirLight(vec3 normal, vec3 viewDir) {
+vec3 getMaterialAlbedo(out float specularStrength, out float shininess) {
+    vec3 albedo = objectColor.rgb;
+    specularStrength = 0.5;
+    shininess = 32.0;
+
+    if (matType == 1) { // Marble Tile Floor
+        float scale = 1.5;
+        vec2 grid = fract(FragPos.xz * scale);
+        float border = 0.03;
+        if(grid.x < border || grid.y < border) {
+            albedo *= 0.5; // Dark grout
+            specularStrength = 0.1;
+        } else {
+            // Procedural marble-like variance
+            float check = mod(floor(FragPos.x * scale) + floor(FragPos.z * scale), 2.0);
+            albedo *= (check > 0.5 ? 1.0 : 0.85);
+            specularStrength = 1.0; // Highly reflective
+            shininess = 128.0;
+        }
+    } 
+    else if (matType == 2) { // Glass
+        specularStrength = 1.5;
+        shininess = 256.0;
+    }
+    else if (matType == 3) { // Wood
+        float grain = fract(LocalPos.x * 20.0 + sin(LocalPos.z * 10.0) * 0.1);
+        albedo *= (0.8 + 0.2 * grain);
+        specularStrength = 0.2;
+        shininess = 16.0;
+    }
+    return albedo;
+}
+
+vec3 CalcDirLight(vec3 normal, vec3 viewDir, vec3 albedo, float specStr, float shiny) {
     vec3 lightDir = normalize(-dirLightDir);
     float diff = max(dot(normal, lightDir), 0.0);
     vec3 reflectDir = reflect(-lightDir, normal);
-    float spec = pow(max(dot(viewDir, reflectDir), 0.0), 32.0);
-    vec3 ambient  = 0.4 * dirLightColor; // Boosted ambient for a brighter mall
-    vec3 diffuse  = diff * dirLightColor;
-    vec3 specular = spec * dirLightColor * 0.5;
+    float spec = pow(max(dot(viewDir, reflectDir), 0.0), shiny);
+    
+    // Slightly lowered ambient to restore 3D depth and shadows to white objects
+    vec3 ambient  = 0.45 * dirLightColor * albedo;
+    vec3 diffuse  = diff * dirLightColor * albedo;
+    vec3 specular = specStr * spec * dirLightColor;
     return (ambient + diffuse + specular);
 }
 
-vec3 CalcPointLight(int i, vec3 normal, vec3 fragPos, vec3 viewDir) {
+vec3 CalcPointLight(int i, vec3 normal, vec3 fragPos, vec3 viewDir, vec3 albedo, float specStr, float shiny) {
     vec3 lightDir = normalize(pointLightPositions[i] - fragPos);
     float diff = max(dot(normal, lightDir), 0.0);
     vec3 reflectDir = reflect(-lightDir, normal);
-    float spec = pow(max(dot(viewDir, reflectDir), 0.0), 32.0);
+    float spec = pow(max(dot(viewDir, reflectDir), 0.0), shiny);
     
     float distance = length(pointLightPositions[i] - fragPos);
-    float attenuation = 1.0 / (1.0 + 0.14 * distance + 0.07 * (distance * distance));    
     
-    vec3 ambient  = 0.1 * pointLightColors[i];
-    vec3 diffuse  = diff * pointLightColors[i];
-    vec3 specular = spec * pointLightColors[i];
+    // Gentler attenuation so light reaches further into the corridors
+    float attenuation = 1.0 / (1.0 + 0.045 * distance + 0.0075 * (distance * distance));    
+    
+    // Point light ambient contribution
+    vec3 ambient  = 0.15 * pointLightColors[i] * albedo;
+    vec3 diffuse  = diff * pointLightColors[i] * albedo;
+    vec3 specular = specStr * spec * pointLightColors[i];
     return (ambient + diffuse + specular) * attenuation;
 }
 
-vec3 CalcSpotLight(vec3 normal, vec3 fragPos, vec3 viewDir) {
+vec3 CalcSpotLight(vec3 normal, vec3 fragPos, vec3 viewDir, vec3 albedo, float specStr, float shiny) {
     if(!flashlightOn) return vec3(0.0);
     vec3 lightDir = normalize(spotLightPos - fragPos);
     float diff = max(dot(normal, lightDir), 0.0);
     vec3 reflectDir = reflect(-lightDir, normal);
-    float spec = pow(max(dot(viewDir, reflectDir), 0.0), 32.0);
+    float spec = pow(max(dot(viewDir, reflectDir), 0.0), shiny);
     
     float distance = length(spotLightPos - fragPos);
     float attenuation = 1.0 / (1.0 + 0.045 * distance + 0.0075 * (distance * distance));    
@@ -200,27 +237,35 @@ vec3 CalcSpotLight(vec3 normal, vec3 fragPos, vec3 viewDir) {
     float epsilon = spotCutOff - spotOuterCutOff;
     float intensity = clamp((theta - spotOuterCutOff) / epsilon, 0.0, 1.0);
     
-    vec3 ambient = 0.1 * spotLightColor;
-    vec3 diffuse = diff * spotLightColor;
-    vec3 specular = spec * spotLightColor;
+    vec3 ambient = 0.1 * spotLightColor * albedo;
+    vec3 diffuse = diff * spotLightColor * albedo;
+    vec3 specular = specStr * spec * spotLightColor;
     return (ambient + diffuse + specular) * attenuation * intensity;
 }
 
 void main() {
+    if (matType == 4) { // Neon / Emissive
+        FragColor = vec4(objectColor.rgb * 1.5, objectColor.a);
+        return;
+    }
+
+    float specStr, shiny;
+    vec3 albedo = getMaterialAlbedo(specStr, shiny);
+    
     vec3 norm = normalize(Normal);
     vec3 viewDir = normalize(viewPos - FragPos);
     
-    vec3 result = CalcDirLight(norm, viewDir);
+    vec3 result = CalcDirLight(norm, viewDir, albedo, specStr, shiny);
     for(int i = 0; i < NR_POINT_LIGHTS; i++)
-        result += CalcPointLight(i, norm, FragPos, viewDir);    
-    result += CalcSpotLight(norm, FragPos, viewDir);
+        result += CalcPointLight(i, norm, FragPos, viewDir, albedo, specStr, shiny);    
+    result += CalcSpotLight(norm, FragPos, viewDir, albedo, specStr, shiny);
     
-    FragColor = vec4(result * objectColor.rgb, objectColor.a);
+    FragColor = vec4(result, objectColor.a);
 }
 )";
 
 // ---------------------------------------------------------
-// Callbacks
+// Callbacks & Input
 // ---------------------------------------------------------
 void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
     glViewport(0, 0, width, height);
@@ -252,29 +297,27 @@ void mouse_callback(GLFWwindow* window, double xposIn, double yposIn) {
     cameraFront = normalize(front);
 }
 
-// ---------------------------------------------------------
-// Simple Collision & Physics
-// ---------------------------------------------------------
+// Simple Collision Map
 bool isPositionValid(float x, float z) {
     // Main Corridor
     if (x > -5.8f && x < 5.8f && z > -28.0f && z < 28.0f) return true;
     
     // Open Shops Interior
     for (int sz = -20; sz <= 20; sz += 10) {
-        // Left Shop Area
+        // Left Shop Area (Doors are between sz-1.5 to sz+1.5)
         if (x >= -14.0f && x <= -5.8f && z > sz - 3.8f && z < sz + 3.8f) {
-            // Exclude Central Table (Center: -10, Size: 3x2)
-            if (x > -11.5f && x < -8.5f && z > sz - 1.0f && z < sz + 1.0f) return false;
-            // Exclude Back Shelves (x < -13.2)
-            if (x < -13.2f) return false;
+            // Doorway restriction (Glass panes act as walls)
+            if (x > -6.5f && (z < sz - 1.5f || z > sz + 1.5f)) return false; 
+            if (x > -11.5f && x < -8.5f && z > sz - 1.0f && z < sz + 1.0f) return false; // Table
+            if (x < -13.2f) return false; // Shelves
             return true; 
         }
         // Right Shop Area
         if (x >= 5.8f && x <= 14.0f && z > sz - 3.8f && z < sz + 3.8f) {
-            // Exclude Central Table (Center: 10, Size: 3x2)
-            if (x > 8.5f && x < 11.5f && z > sz - 1.0f && z < sz + 1.0f) return false;
-            // Exclude Back Shelves (x > 13.2)
-            if (x > 13.2f) return false;
+            // Doorway restriction
+            if (x < 6.5f && (z < sz - 1.5f || z > sz + 1.5f)) return false;
+            if (x > 8.5f && x < 11.5f && z > sz - 1.0f && z < sz + 1.0f) return false; // Table
+            if (x > 13.2f) return false; // Shelves
             return true;
         }
     }
@@ -282,10 +325,12 @@ bool isPositionValid(float x, float z) {
 }
 
 float getFloorHeight(float x, float z) {
-    if (x > -2.0f && x < 2.0f && z > -2.0f && z < 6.0f) {
-        float normalizedZ = (6.0f - z) / 8.0f; 
+    // Escalator Bounds
+    if (x > -3.0f && x < 3.0f && z > -8.0f && z < 0.0f) {
+        float normalizedZ = (0.0f - z) / 8.0f; 
         return 1.5f + (normalizedZ * 5.0f); 
     }
+    // 2nd Floor
     if (cameraPos.y > 4.0f) {
         if (x < -3.0f || x > 3.0f || z < -25.0f || z > 25.0f) return 6.5f; 
     }
@@ -303,24 +348,15 @@ void processInput(GLFWwindow *window) {
             std::cout << "Tour Mode: " << (tourMode ? "ON" : "OFF") << std::endl;
             if (!tourMode) firstMouse = true; 
         }
-    } else {
-        tKeyPressed = false;
-    }
+    } else tKeyPressed = false;
 
     if (glfwGetKey(window, GLFW_KEY_F) == GLFW_PRESS) {
         if (!fKeyPressed) { flashlightOn = !flashlightOn; fKeyPressed = true; }
-    } else {
-        fKeyPressed = false;
-    }
+    } else fKeyPressed = false;
 
-    if (tourMode) {
-        updateTour(deltaTime);
-        return; 
-    }
+    if (tourMode) { updateTour(deltaTime); return; }
 
-    // --- Manual First Person Controls ---
-    float cameraSpeed = 5.0f * deltaTime;
-    
+    float cameraSpeed = 6.0f * deltaTime;
     float moveX = 0.0f, moveZ = 0.0f;
     glm::vec3 flatFront = glm::normalize(glm::vec3(cameraFront.x, 0.0f, cameraFront.z));
     glm::vec3 flatRight = glm::normalize(glm::cross(flatFront, cameraUp));
@@ -330,7 +366,6 @@ void processInput(GLFWwindow *window) {
     if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) { moveX -= flatRight.x; moveZ -= flatRight.z; }
     if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) { moveX += flatRight.x; moveZ += flatRight.z; }
 
-    // Sliding Collision
     if (moveX != 0.0f || moveZ != 0.0f) {
         glm::vec3 moveDir = glm::normalize(glm::vec3(moveX, 0.0f, moveZ));
         float dx = moveDir.x * cameraSpeed;
@@ -359,71 +394,108 @@ void processInput(GLFWwindow *window) {
 // ---------------------------------------------------------
 // Drawing Utilities
 // ---------------------------------------------------------
-void drawBox(unsigned int shader, unsigned int VAO, glm::vec3 position, glm::vec3 scale, glm::vec4 color, float rotY = 0.0f) {
+void drawBox(unsigned int shader, unsigned int VAO, glm::vec3 position, glm::vec3 scale, glm::vec4 color, float rotY = 0.0f, int matType = 0) {
     glm::mat4 model = glm::mat4(1.0f);
     model = glm::translate(model, position);
-    if (rotY != 0.0f) {
-        model = glm::rotate(model, glm::radians(rotY), glm::vec3(0.0f, 1.0f, 0.0f));
-    }
+    if (rotY != 0.0f) model = glm::rotate(model, glm::radians(rotY), glm::vec3(0.0f, 1.0f, 0.0f));
     model = glm::scale(model, scale);
     
     glUniformMatrix4fv(glGetUniformLocation(shader, "model"), 1, GL_FALSE, glm::value_ptr(model));
     glUniform4fv(glGetUniformLocation(shader, "objectColor"), 1, glm::value_ptr(color));
+    glUniform1i(glGetUniformLocation(shader, "matType"), matType);
     
     glBindVertexArray(VAO);
     glDrawArrays(GL_TRIANGLES, 0, 36);
 }
 
-// Draws an animated character (a "man")
+// Draws a detailed humanoid NPC
 void drawMan(unsigned int shader, unsigned int VAO, glm::vec3 pos, float rotY, glm::vec4 shirtColor, bool isWalking, float time) {
-    float legSwing = isWalking ? sin(time * 10.0f) * 30.0f : 0.0f;
+    float swing = isWalking ? sin(time * 12.0f) * 35.0f : 0.0f;
+    // Darkened skin tone for better contrast
+    glm::vec4 skin = glm::vec4(0.8f, 0.6f, 0.45f, 1.0f);
     
-    // Left leg
-    glm::mat4 model = glm::mat4(1.0f);
-    model = glm::translate(model, pos + glm::vec3(-0.15f, 0.5f, 0.0f));
-    model = glm::rotate(model, glm::radians(rotY), glm::vec3(0.0f, 1.0f, 0.0f));
-    model = glm::translate(model, glm::vec3(0.0f, 0.5f, 0.0f)); 
-    model = glm::rotate(model, glm::radians(legSwing), glm::vec3(1.0f, 0.0f, 0.0f));
-    model = glm::translate(model, glm::vec3(0.0f, -0.5f, 0.0f));
-    model = glm::scale(model, glm::vec3(0.2f, 1.0f, 0.2f));
-    glUniformMatrix4fv(glGetUniformLocation(shader, "model"), 1, GL_FALSE, glm::value_ptr(model));
-    glUniform4fv(glGetUniformLocation(shader, "objectColor"), 1, glm::value_ptr(glm::vec4(0.1f, 0.1f, 0.15f, 1.0f)));
-    glBindVertexArray(VAO); glDrawArrays(GL_TRIANGLES, 0, 36);
-    
-    // Right leg
-    model = glm::mat4(1.0f);
-    model = glm::translate(model, pos + glm::vec3(0.15f, 0.5f, 0.0f));
-    model = glm::rotate(model, glm::radians(rotY), glm::vec3(0.0f, 1.0f, 0.0f));
-    model = glm::translate(model, glm::vec3(0.0f, 0.5f, 0.0f)); 
-    model = glm::rotate(model, glm::radians(-legSwing), glm::vec3(1.0f, 0.0f, 0.0f));
-    model = glm::translate(model, glm::vec3(0.0f, -0.5f, 0.0f));
-    model = glm::scale(model, glm::vec3(0.2f, 1.0f, 0.2f));
-    glUniformMatrix4fv(glGetUniformLocation(shader, "model"), 1, GL_FALSE, glm::value_ptr(model));
-    glUniform4fv(glGetUniformLocation(shader, "objectColor"), 1, glm::value_ptr(glm::vec4(0.1f, 0.1f, 0.15f, 1.0f)));
-    glBindVertexArray(VAO); glDrawArrays(GL_TRIANGLES, 0, 36);
+    glm::vec4 pants = glm::vec4(0.25f, 0.25f, 0.3f, 1.0f);
 
-    // Torso & Head
-    drawBox(shader, VAO, pos + glm::vec3(0.0f, 1.5f, 0.0f), glm::vec3(0.6f, 1.0f, 0.3f), shirtColor, rotY);
-    drawBox(shader, VAO, pos + glm::vec3(0.0f, 2.2f, 0.0f), glm::vec3(0.35f, 0.4f, 0.35f), glm::vec4(0.9f, 0.7f, 0.6f, 1.0f), rotY);
+    // Torso
+    drawBox(shader, VAO, pos + glm::vec3(0.0f, 1.3f, 0.0f), glm::vec3(0.5f, 0.8f, 0.25f), shirtColor, rotY);
+    // Head
+    drawBox(shader, VAO, pos + glm::vec3(0.0f, 1.9f, 0.0f), glm::vec3(0.3f, 0.35f, 0.3f), skin, rotY);
+    
+    // Left Leg
+    glm::mat4 model = glm::mat4(1.0f);
+    model = glm::translate(model, pos + glm::vec3(-0.15f, 0.9f, 0.0f));
+    model = glm::rotate(model, glm::radians(rotY), glm::vec3(0.0f, 1.0f, 0.0f));
+    model = glm::rotate(model, glm::radians(swing), glm::vec3(1.0f, 0.0f, 0.0f));
+    model = glm::translate(model, glm::vec3(0.0f, -0.45f, 0.0f));
+    model = glm::scale(model, glm::vec3(0.2f, 0.9f, 0.2f));
+    glUniformMatrix4fv(glGetUniformLocation(shader, "model"), 1, GL_FALSE, glm::value_ptr(model));
+    glUniform4fv(glGetUniformLocation(shader, "objectColor"), 1, glm::value_ptr(pants));
+    glUniform1i(glGetUniformLocation(shader, "matType"), 0);
+    glDrawArrays(GL_TRIANGLES, 0, 36);
+
+    // Right Leg
+    model = glm::mat4(1.0f);
+    model = glm::translate(model, pos + glm::vec3(0.15f, 0.9f, 0.0f));
+    model = glm::rotate(model, glm::radians(rotY), glm::vec3(0.0f, 1.0f, 0.0f));
+    model = glm::rotate(model, glm::radians(-swing), glm::vec3(1.0f, 0.0f, 0.0f));
+    model = glm::translate(model, glm::vec3(0.0f, -0.45f, 0.0f));
+    model = glm::scale(model, glm::vec3(0.2f, 0.9f, 0.2f));
+    glUniformMatrix4fv(glGetUniformLocation(shader, "model"), 1, GL_FALSE, glm::value_ptr(model));
+    glDrawArrays(GL_TRIANGLES, 0, 36);
+
+    // Left Arm
+    model = glm::mat4(1.0f);
+    model = glm::translate(model, pos + glm::vec3(-0.35f, 1.6f, 0.0f));
+    model = glm::rotate(model, glm::radians(rotY), glm::vec3(0.0f, 1.0f, 0.0f));
+    model = glm::rotate(model, glm::radians(-swing), glm::vec3(1.0f, 0.0f, 0.0f)); // Opposite to left leg
+    model = glm::translate(model, glm::vec3(0.0f, -0.35f, 0.0f));
+    model = glm::scale(model, glm::vec3(0.15f, 0.7f, 0.15f));
+    glUniformMatrix4fv(glGetUniformLocation(shader, "model"), 1, GL_FALSE, glm::value_ptr(model));
+    glUniform4fv(glGetUniformLocation(shader, "objectColor"), 1, glm::value_ptr(skin));
+    glDrawArrays(GL_TRIANGLES, 0, 36);
+
+    // Right Arm
+    model = glm::mat4(1.0f);
+    model = glm::translate(model, pos + glm::vec3(0.35f, 1.6f, 0.0f));
+    model = glm::rotate(model, glm::radians(rotY), glm::vec3(0.0f, 1.0f, 0.0f));
+    model = glm::rotate(model, glm::radians(swing), glm::vec3(1.0f, 0.0f, 0.0f)); // Opposite to right leg
+    model = glm::translate(model, glm::vec3(0.0f, -0.35f, 0.0f));
+    model = glm::scale(model, glm::vec3(0.15f, 0.7f, 0.15f));
+    glUniformMatrix4fv(glGetUniformLocation(shader, "model"), 1, GL_FALSE, glm::value_ptr(model));
+    glDrawArrays(GL_TRIANGLES, 0, 36);
 }
 
 void drawShopInterior(unsigned int shader, unsigned int VAO, glm::vec3 center, bool isLeft) {
-    // Central display table
-    drawBox(shader, VAO, center + glm::vec3(0.0f, 0.4f, 0.0f), glm::vec3(3.0f, 0.8f, 2.0f), glm::vec4(0.6f, 0.4f, 0.3f, 1.0f));
+    // Central display table (Wood)
+    drawBox(shader, VAO, center + glm::vec3(0.0f, 0.4f, 0.0f), glm::vec3(3.0f, 0.8f, 2.0f), glm::vec4(0.5f, 0.3f, 0.2f, 1.0f), 0.0f, 3);
     
-    // Featured Products on table
-    drawBox(shader, VAO, center + glm::vec3(-1.0f, 0.9f, 0.0f), glm::vec3(0.4f), glm::vec4(1.0f, 0.2f, 0.2f, 1.0f)); // Red
-    drawBox(shader, VAO, center + glm::vec3( 0.0f, 0.9f, 0.0f), glm::vec3(0.3f, 0.6f, 0.3f), glm::vec4(0.2f, 1.0f, 0.2f, 1.0f)); // Green
-    drawBox(shader, VAO, center + glm::vec3( 1.0f, 0.9f, 0.0f), glm::vec3(0.5f, 0.2f, 0.5f), glm::vec4(0.2f, 0.2f, 1.0f, 1.0f)); // Blue
+    // Featured Products
+    drawBox(shader, VAO, center + glm::vec3(-1.0f, 0.9f, 0.0f), glm::vec3(0.4f), glm::vec4(1.0f, 0.2f, 0.2f, 1.0f));
+    drawBox(shader, VAO, center + glm::vec3( 0.0f, 0.9f, 0.0f), glm::vec3(0.3f, 0.6f, 0.3f), glm::vec4(0.2f, 1.0f, 0.2f, 1.0f));
+    drawBox(shader, VAO, center + glm::vec3( 1.0f, 0.9f, 0.0f), glm::vec3(0.5f, 0.2f, 0.5f), glm::vec4(0.2f, 0.5f, 1.0f, 1.0f));
     
-    // Back wall shelves and items
+    // Back wall shelves (Wood)
     float backX = isLeft ? center.x - 3.5f : center.x + 3.5f;
-    drawBox(shader, VAO, glm::vec3(backX, 2.0f, center.z), glm::vec3(0.6f, 4.0f, 6.0f), glm::vec4(0.8f, 0.8f, 0.8f, 1.0f));
+    drawBox(shader, VAO, glm::vec3(backX, 2.0f, center.z), glm::vec3(0.8f, 4.0f, 6.0f), glm::vec4(0.4f, 0.25f, 0.15f, 1.0f), 0.0f, 3);
+    
+    // Items on shelves
     for(int i=-2; i<=2; i+=2) {
         float shelfZ = center.z + i;
-        drawBox(shader, VAO, glm::vec3(backX + (isLeft?0.4f:-0.4f), 1.5f, shelfZ), glm::vec3(0.4f), glm::vec4(0.9f, 0.9f, 0.1f, 1.0f));
-        drawBox(shader, VAO, glm::vec3(backX + (isLeft?0.4f:-0.4f), 2.5f, shelfZ), glm::vec3(0.4f), glm::vec4(0.1f, 0.9f, 0.9f, 1.0f));
+        float itemX = backX + (isLeft ? 0.4f : -0.4f);
+        drawBox(shader, VAO, glm::vec3(itemX, 1.5f, shelfZ), glm::vec3(0.4f), glm::vec4(0.9f, 0.8f, 0.1f, 1.0f));
+        drawBox(shader, VAO, glm::vec3(itemX, 2.5f, shelfZ), glm::vec3(0.4f), glm::vec4(0.1f, 0.8f, 0.9f, 1.0f));
+        drawBox(shader, VAO, glm::vec3(itemX, 3.5f, shelfZ), glm::vec3(0.3f, 0.5f, 0.3f), glm::vec4(0.8f, 0.1f, 0.8f, 1.0f));
     }
+}
+
+void drawPlanterTree(unsigned int shader, unsigned int VAO, glm::vec3 pos) {
+    // Planter Box (Wood)
+    drawBox(shader, VAO, pos + glm::vec3(0.0f, 0.3f, 0.0f), glm::vec3(1.5f, 0.6f, 1.5f), glm::vec4(0.3f, 0.2f, 0.1f, 1.0f), 0.0f, 3);
+    // Trunk
+    drawBox(shader, VAO, pos + glm::vec3(0.0f, 1.5f, 0.0f), glm::vec3(0.2f, 2.0f, 0.2f), glm::vec4(0.4f, 0.25f, 0.1f, 1.0f), 0.0f, 3);
+    // Leaves (Overlapping boxes)
+    drawBox(shader, VAO, pos + glm::vec3(0.0f, 2.5f, 0.0f), glm::vec3(1.8f, 1.0f, 1.8f), glm::vec4(0.15f, 0.5f, 0.15f, 1.0f));
+    drawBox(shader, VAO, pos + glm::vec3(0.0f, 3.2f, 0.0f), glm::vec3(1.2f, 1.0f, 1.2f), glm::vec4(0.2f, 0.6f, 0.2f, 1.0f));
 }
 
 // ---------------------------------------------------------
@@ -435,7 +507,7 @@ int main() {
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-    GLFWwindow* window = glfwCreateWindow(1280, 720, "Multi-Level Virtual Mall", NULL, NULL);
+    GLFWwindow* window = glfwCreateWindow(1280, 720, "Next-Gen Virtual Mall", NULL, NULL);
     if (window == NULL) {
         std::cout << "Window creation failed\n";
         glfwTerminate();
@@ -452,6 +524,9 @@ int main() {
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    
+    // REMOVED: glCullFace(GL_BACK) and glEnable(GL_CULL_FACE). 
+    // The generic cube vertices have mixed winding orders causing entire objects to render transparently!
 
     float vertices[] = {
         // positions          // normals
@@ -486,78 +561,41 @@ int main() {
     glLinkProgram(shaderProgram);
     glDeleteShader(vertexShader); glDeleteShader(fragmentShader);
 
-    // Setup Shop Lights Data - Improved Natural Lighting
+    // Warm, realistic indoor mall lights
     glm::vec3 pointLightPositions[10];
     glm::vec3 pointLightColors[10];
     int lightIdx = 0;
     for (int z = -20; z <= 20; z += 10) {
         pointLightPositions[lightIdx] = glm::vec3(-9.0f, 4.0f, z);
-        pointLightColors[lightIdx] = glm::vec3(0.9f, 0.85f, 0.8f); // Warm white light
+        pointLightColors[lightIdx] = glm::vec3(1.0f, 0.9f, 0.8f); 
         lightIdx++;
         pointLightPositions[lightIdx] = glm::vec3(9.0f, 4.0f, z);
-        pointLightColors[lightIdx] = glm::vec3(0.85f, 0.9f, 1.0f); // Cool white light
+        pointLightColors[lightIdx] = glm::vec3(0.9f, 0.95f, 1.0f); 
         lightIdx++;
     }
 
-    // Initialize NPCs
     srand((unsigned int)time(NULL));
     
-    // Create random wandering shoppers
+    // Shoppers
     for(int i=0; i<15; i++) {
         NPC npc;
-        npc.pos = glm::vec3(randFloat(-4.0f, 4.0f), 0.0f, randFloat(-25.0f, 25.0f));
-        npc.target = glm::vec3(randFloat(-4.0f, 4.0f), 0.0f, randFloat(-25.0f, 25.0f));
-        npc.speed = randFloat(1.5f, 3.5f);
-        npc.color = glm::vec4(randFloat(0.2f, 0.9f), randFloat(0.2f, 0.9f), randFloat(0.2f, 0.9f), 1.0f);
+        npc.pos = glm::vec3(randFloat(-3.0f, 3.0f), 0.0f, randFloat(-25.0f, 25.0f));
+        npc.target = npc.pos;
+        npc.speed = randFloat(1.5f, 3.0f);
+        // Reduced the max lightness range so their clothes have proper color/contrast against walls
+        npc.color = glm::vec4(randFloat(0.1f, 0.7f), randFloat(0.1f, 0.7f), randFloat(0.2f, 0.8f), 1.0f);
         npc.rotY = 0.0f;
         npc.waitTimer = randFloat(0.0f, 2.0f);
         npc.isWalking = true;
-        npc.hasBounds = false; // Free roam
+        npc.hasBounds = false;
         npcList.push_back(npc);
     }
 
-    // Create bounded Shopkeepers pacing in their specific shops
-    for (int z = -20; z <= 20; z += 10) {
-        for (float y : {0.0f, 5.0f}) { // Floor 1 and Floor 2
-            // Left Shopkeeper
-            NPC skL;
-            skL.pos = glm::vec3(-12.0f, y, z); // Start correctly behind table
-            skL.target = skL.pos;
-            skL.speed = randFloat(1.0f, 2.0f); // Slower, relaxed walk inside store
-            skL.color = glm::vec4(0.8f, 0.4f, 0.1f, 1.0f); // Bright orange uniform
-            skL.rotY = 90.0f;
-            skL.waitTimer = randFloat(0.0f, 2.0f);
-            skL.isWalking = false;
-            skL.hasBounds = true; 
-            // Restrict bounds strictly behind the table aisle
-            skL.boundsMin = glm::vec3(-13.0f, y, z - 2.5f); 
-            skL.boundsMax = glm::vec3(-11.6f, y, z + 2.5f);
-            npcList.push_back(skL);
+    std::cout << "--- NEXT-GEN VIRTUAL MALL ---" << std::endl;
+    std::cout << "[WASD] + [SPACE] : Move freely" << std::endl;
+    std::cout << "[T] : Cinematic Tour Mode" << std::endl;
+    std::cout << "[F] : Flashlight" << std::endl;
 
-            // Right Shopkeeper
-            NPC skR;
-            skR.pos = glm::vec3(12.0f, y, z); // Start correctly behind table
-            skR.target = skR.pos;
-            skR.speed = randFloat(1.0f, 2.0f);
-            skR.color = glm::vec4(0.8f, 0.4f, 0.1f, 1.0f); // Bright orange uniform
-            skR.rotY = -90.0f;
-            skR.waitTimer = randFloat(0.0f, 2.0f);
-            skR.isWalking = false;
-            skR.hasBounds = true; 
-            // Restrict bounds strictly behind the table aisle
-            skR.boundsMin = glm::vec3(11.6f, y, z - 2.5f); 
-            skR.boundsMax = glm::vec3(13.0f, y, z + 2.5f);
-            npcList.push_back(skR);
-        }
-    }
-
-    std::cout << "--- VIRTUAL MALL STARTED ---" << std::endl;
-    std::cout << "Controls:" << std::endl;
-    std::cout << "[WASD] + [SPACE] : Move around freely" << std::endl;
-    std::cout << "[T] : Toggle Cinematic Tour Mode" << std::endl;
-    std::cout << "[F] : Toggle Flashlight" << std::endl;
-
-    // Rendering Loop
     while (!glfwWindowShouldClose(window)) {
         float currentFrame = static_cast<float>(glfwGetTime());
         deltaTime = currentFrame - lastFrame;
@@ -565,23 +603,22 @@ int main() {
 
         processInput(window);
 
-        glClearColor(0.02f, 0.02f, 0.05f, 1.0f); // Night sky out the skylight
+        // Night sky 
+        glClearColor(0.01f, 0.01f, 0.03f, 1.0f); 
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         glUseProgram(shaderProgram);
 
-        // Update Camera Uniforms
         glUniform3fv(glGetUniformLocation(shaderProgram, "viewPos"), 1, glm::value_ptr(cameraPos));
         glm::mat4 projection = glm::perspective(glm::radians(45.0f), 1280.0f / 720.0f, 0.1f, 100.0f);
         glm::mat4 view = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
         glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
         glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "view"), 1, GL_FALSE, glm::value_ptr(view));
 
-        // Uniforms: Directional Light - Set to a brighter natural ambient color
+        // Ambient Skylight
         glUniform3f(glGetUniformLocation(shaderProgram, "dirLightDir"), -0.2f, -1.0f, -0.3f);
-        glUniform3f(glGetUniformLocation(shaderProgram, "dirLightColor"), 0.45f, 0.45f, 0.5f);
+        glUniform3f(glGetUniformLocation(shaderProgram, "dirLightColor"), 0.5f, 0.5f, 0.6f);
 
-        // Uniforms: Point Lights (Shops)
         for(int i=0; i<10; i++) {
             std::string posStr = "pointLightPositions[" + std::to_string(i) + "]";
             std::string colStr = "pointLightColors[" + std::to_string(i) + "]";
@@ -589,7 +626,6 @@ int main() {
             glUniform3fv(glGetUniformLocation(shaderProgram, colStr.c_str()), 1, glm::value_ptr(pointLightColors[i]));
         }
 
-        // Uniforms: Spot Light (Flashlight)
         glUniform3fv(glGetUniformLocation(shaderProgram, "spotLightPos"), 1, glm::value_ptr(cameraPos));
         glUniform3fv(glGetUniformLocation(shaderProgram, "spotLightDir"), 1, glm::value_ptr(cameraFront));
         glUniform3f(glGetUniformLocation(shaderProgram, "spotLightColor"), 1.0f, 0.95f, 0.8f);
@@ -597,30 +633,92 @@ int main() {
         glUniform1f(glGetUniformLocation(shaderProgram, "spotOuterCutOff"), glm::cos(glm::radians(17.5f)));
         glUniform1i(glGetUniformLocation(shaderProgram, "flashlightOn"), flashlightOn);
 
-        // --- DRAW SOLID OBJECTS FIRST ---
+        // ==========================================
+        // 1. DRAW OPAQUE/SOLID OBJECTS FIRST
+        // ==========================================
         
-        // Ground Floor
-        drawBox(shaderProgram, VAO, glm::vec3(0.0f, -0.25f, 0.0f), glm::vec3(40.0f, 0.5f, 60.0f), glm::vec4(0.2f, 0.2f, 0.25f, 1.0f));
-        // 2nd Floor Balconies (Left and Right)
-        drawBox(shaderProgram, VAO, glm::vec3(-9.0f, 4.75f, 0.0f), glm::vec3(18.0f, 0.5f, 60.0f), glm::vec4(0.3f, 0.3f, 0.3f, 1.0f));
-        drawBox(shaderProgram, VAO, glm::vec3( 9.0f, 4.75f, 0.0f), glm::vec3(18.0f, 0.5f, 60.0f), glm::vec4(0.3f, 0.3f, 0.3f, 1.0f));
+        // Polished Marble Floor (matType 1)
+        drawBox(shaderProgram, VAO, glm::vec3(0.0f, -0.25f, 0.0f), glm::vec3(40.0f, 0.5f, 60.0f), glm::vec4(0.8f, 0.8f, 0.85f, 1.0f), 0.0f, 1);
         
-        // Ceiling Frame (Around skylight)
-        drawBox(shaderProgram, VAO, glm::vec3(-15.0f, 10.25f, 0.0f), glm::vec3(10.0f, 0.5f, 60.0f), glm::vec4(0.8f, 0.8f, 0.8f, 1.0f));
-        drawBox(shaderProgram, VAO, glm::vec3( 15.0f, 10.25f, 0.0f), glm::vec3(10.0f, 0.5f, 60.0f), glm::vec4(0.8f, 0.8f, 0.8f, 1.0f));
+        // 2nd Floor Balconies 
+        drawBox(shaderProgram, VAO, glm::vec3(-12.0f, 4.75f, 0.0f), glm::vec3(24.0f, 0.5f, 60.0f), glm::vec4(0.65f, 0.65f, 0.7f, 1.0f), 0.0f, 1);
+        drawBox(shaderProgram, VAO, glm::vec3( 12.0f, 4.75f, 0.0f), glm::vec3(24.0f, 0.5f, 60.0f), glm::vec4(0.65f, 0.65f, 0.7f, 1.0f), 0.0f, 1);
         
-        // Solid Walls (Back and Front)
-        drawBox(shaderProgram, VAO, glm::vec3(0.0f, 5.0f, -30.0f), glm::vec3(40.0f, 10.0f, 1.0f), glm::vec4(0.7f, 0.7f, 0.7f, 1.0f));
-        drawBox(shaderProgram, VAO, glm::vec3(0.0f, 5.0f,  30.0f), glm::vec3(40.0f, 10.0f, 1.0f), glm::vec4(0.7f, 0.7f, 0.7f, 1.0f));
+        // Solid End Walls (Darkened for contrast)
+        drawBox(shaderProgram, VAO, glm::vec3(0.0f, 5.0f, -30.0f), glm::vec3(40.0f, 10.0f, 1.0f), glm::vec4(0.5f, 0.5f, 0.55f, 1.0f));
+        drawBox(shaderProgram, VAO, glm::vec3(0.0f, 5.0f,  30.0f), glm::vec3(40.0f, 10.0f, 1.0f), glm::vec4(0.5f, 0.5f, 0.55f, 1.0f));
 
-        // Central Grand Staircase
-        for (int i = 0; i < 20; i++) {
-            float height = i * 0.25f;
-            float depthOffset = 6.0f - (i * 0.4f);
-            drawBox(shaderProgram, VAO, glm::vec3(0.0f, height/2.0f, depthOffset), glm::vec3(4.0f, height, 0.4f), glm::vec4(0.5f, 0.5f, 0.5f, 1.0f));
+        // Ceiling Frame / Skylight Truss
+        drawBox(shaderProgram, VAO, glm::vec3(-6.0f, 10.0f, 0.0f), glm::vec3(1.0f, 0.5f, 60.0f), glm::vec4(0.2f, 0.2f, 0.2f, 1.0f));
+        drawBox(shaderProgram, VAO, glm::vec3( 6.0f, 10.0f, 0.0f), glm::vec3(1.0f, 0.5f, 60.0f), glm::vec4(0.2f, 0.2f, 0.2f, 1.0f));
+        for(int i=-25; i<=25; i+=5) { // Cross beams
+            drawBox(shaderProgram, VAO, glm::vec3(0.0f, 10.0f, i), glm::vec3(12.0f, 0.4f, 0.4f), glm::vec4(0.15f, 0.15f, 0.15f, 1.0f));
         }
 
-        // Update NPC positions
+        // Grand Dual Escalator (Solid Parts)
+        // Center Divider
+        drawBox(shaderProgram, VAO, glm::vec3(0.0f, 2.5f, -4.0f), glm::vec3(0.6f, 5.0f, 8.5f), glm::vec4(0.3f, 0.3f, 0.3f, 1.0f));
+        // Escalator Steps (Approximated as a slanted grooved block)
+        for (int i = 0; i < 40; i++) {
+            float height = i * 0.125f;
+            float zOffset = 0.0f - (i * 0.2f);
+            // Up lane
+            drawBox(shaderProgram, VAO, glm::vec3(-1.5f, height, zOffset), glm::vec3(2.4f, 0.2f, 0.3f), glm::vec4(0.1f, 0.1f, 0.1f, 1.0f));
+            // Down lane
+            drawBox(shaderProgram, VAO, glm::vec3( 1.5f, height, zOffset), glm::vec3(2.4f, 0.2f, 0.3f), glm::vec4(0.1f, 0.1f, 0.1f, 1.0f));
+        }
+        
+        // Draw Shops
+        for (int z = -20; z <= 20; z += 10) {
+            for(float y : {0.0f, 5.0f}) { // Floor 1 and 2
+                // LEFT SHOP
+                glm::vec3 lPos(-10.0f, y + 2.5f, z);
+                // Shop solid walls (darkened for contrast)
+                drawBox(shaderProgram, VAO, lPos + glm::vec3(-3.9f, 0.0f, 0.0f), glm::vec3(0.2f, 5.0f, 8.0f), glm::vec4(0.55f, 0.55f, 0.6f, 1.0f)); 
+                drawBox(shaderProgram, VAO, lPos + glm::vec3(0.0f, 0.0f, -3.9f), glm::vec3(8.0f, 5.0f, 0.2f), glm::vec4(0.55f, 0.55f, 0.6f, 1.0f)); 
+                drawBox(shaderProgram, VAO, lPos + glm::vec3(0.0f, 0.0f, 3.9f),  glm::vec3(8.0f, 5.0f, 0.2f), glm::vec4(0.55f, 0.55f, 0.6f, 1.0f)); 
+                
+                // Storefront Frame (Metal)
+                drawBox(shaderProgram, VAO, lPos + glm::vec3(4.0f, 0.0f, -2.5f), glm::vec3(0.2f, 5.0f, 3.0f), glm::vec4(0.2f, 0.2f, 0.2f, 1.0f)); // Left frame
+                drawBox(shaderProgram, VAO, lPos + glm::vec3(4.0f, 0.0f,  2.5f), glm::vec3(0.2f, 5.0f, 3.0f), glm::vec4(0.2f, 0.2f, 0.2f, 1.0f)); // Right frame
+                drawBox(shaderProgram, VAO, lPos + glm::vec3(4.0f, 2.0f,  0.0f), glm::vec3(0.2f, 1.0f, 8.0f), glm::vec4(0.2f, 0.2f, 0.2f, 1.0f)); // Top Header
+                
+                // Emissive Neon Signs (matType 5)
+                glm::vec4 signColorL = glm::vec4(0.2f + abs(z%3)*0.4f, 0.8f, 0.9f - abs(z%4)*0.2f, 1.0f);
+                drawBox(shaderProgram, VAO, glm::vec3(-5.9f, y + 4.5f, z), glm::vec3(0.1f, 0.8f, 4.0f), signColorL, 0.0f, 5);
+                drawShopInterior(shaderProgram, VAO, glm::vec3(-10.0f, y, z), true);
+
+                // RIGHT SHOP
+                glm::vec3 rPos(10.0f, y + 2.5f, z);
+                drawBox(shaderProgram, VAO, rPos + glm::vec3(3.9f, 0.0f, 0.0f), glm::vec3(0.2f, 5.0f, 8.0f), glm::vec4(0.55f, 0.55f, 0.6f, 1.0f)); 
+                drawBox(shaderProgram, VAO, rPos + glm::vec3(0.0f, 0.0f, -3.9f), glm::vec3(8.0f, 5.0f, 0.2f), glm::vec4(0.55f, 0.55f, 0.6f, 1.0f)); 
+                drawBox(shaderProgram, VAO, rPos + glm::vec3(0.0f, 0.0f, 3.9f),  glm::vec3(8.0f, 5.0f, 0.2f), glm::vec4(0.55f, 0.55f, 0.6f, 1.0f)); 
+                
+                // Storefront Frame
+                drawBox(shaderProgram, VAO, rPos + glm::vec3(-4.0f, 0.0f, -2.5f), glm::vec3(0.2f, 5.0f, 3.0f), glm::vec4(0.2f, 0.2f, 0.2f, 1.0f));
+                drawBox(shaderProgram, VAO, rPos + glm::vec3(-4.0f, 0.0f,  2.5f), glm::vec3(0.2f, 5.0f, 3.0f), glm::vec4(0.2f, 0.2f, 0.2f, 1.0f));
+                drawBox(shaderProgram, VAO, rPos + glm::vec3(-4.0f, 2.0f,  0.0f), glm::vec3(0.2f, 1.0f, 8.0f), glm::vec4(0.2f, 0.2f, 0.2f, 1.0f));
+                
+                // Emissive Neon Signs
+                glm::vec4 signColorR = glm::vec4(0.9f, 0.3f + abs(z%2)*0.3f, 0.3f, 1.0f);
+                drawBox(shaderProgram, VAO, glm::vec3(5.9f, y + 4.5f, z), glm::vec3(0.1f, 0.8f, 4.0f), signColorR, 0.0f, 5);
+                drawShopInterior(shaderProgram, VAO, glm::vec3(10.0f, y, z), false);
+            }
+
+            // Grand Pillars (Darkened for contrast)
+            drawBox(shaderProgram, VAO, glm::vec3(-5.8f, 5.0f, z + 4.8f), glm::vec3(0.6f, 10.0f, 0.6f), glm::vec4(0.65f, 0.65f, 0.7f, 1.0f), 0.0f, 1);
+            drawBox(shaderProgram, VAO, glm::vec3( 5.8f, 5.0f, z + 4.8f), glm::vec3(0.6f, 10.0f, 0.6f), glm::vec4(0.65f, 0.65f, 0.7f, 1.0f), 0.0f, 1);
+
+            // Ground Floor Centerpieces (Trees and Benches)
+            if (z != 0 && z != -10) {
+                drawPlanterTree(shaderProgram, VAO, glm::vec3(0.0f, 0.0f, z));
+                // Benches
+                drawBox(shaderProgram, VAO, glm::vec3(0.0f, 0.4f, z + 2.0f), glm::vec3(2.0f, 0.1f, 0.6f), glm::vec4(0.4f, 0.2f, 0.1f, 1.0f), 0.0f, 3);
+                drawBox(shaderProgram, VAO, glm::vec3(0.0f, 0.4f, z - 2.0f), glm::vec3(2.0f, 0.1f, 0.6f), glm::vec4(0.4f, 0.2f, 0.1f, 1.0f), 0.0f, 3);
+            }
+        }
+
+        // NPCs Update & Draw
         for(auto& npc : npcList) {
             if(npc.waitTimer > 0.0f) {
                 npc.waitTimer -= deltaTime;
@@ -628,125 +726,61 @@ int main() {
             } else {
                 npc.isWalking = true;
                 glm::vec3 dir = npc.target - npc.pos;
-                dir.y = 0.0f; // ignore Y axis when finding distance
+                dir.y = 0.0f;
                 float dist = glm::length(dir);
                 if(dist < 0.5f) {
-                    if (npc.hasBounds) {
-                        // Shopkeeper pathing (bounded)
-                        npc.target = glm::vec3(
-                            randFloat(npc.boundsMin.x, npc.boundsMax.x), 
-                            npc.pos.y, 
-                            randFloat(npc.boundsMin.z, npc.boundsMax.z)
-                        );
-                    } else {
-                        // Free roaming shopper pathing
-                        npc.target = glm::vec3(randFloat(-4.0f, 4.0f), 0.0f, randFloat(-25.0f, 25.0f));
-                        if (rand() % 4 == 0) { // Sometimes enter a shop!
-                            float signX = (rand()%2 == 0) ? -10.0f : 10.0f;
-                            float shopZs[] = {-20, -10, 0, 10, 20};
-                            npc.target = glm::vec3(signX, 0.0f, shopZs[rand()%5]);
-                        }
+                    npc.target = glm::vec3(randFloat(-4.0f, 4.0f), 0.0f, randFloat(-25.0f, 25.0f));
+                    if (rand() % 4 == 0) { 
+                        float signX = (rand()%2 == 0) ? -8.0f : 8.0f;
+                        float shopZs[] = {-20, -10, 0, 10, 20};
+                        npc.target = glm::vec3(signX, 0.0f, shopZs[rand()%5]);
                     }
-                    npc.waitTimer = randFloat(1.0f, 4.0f);
+                    npc.waitTimer = randFloat(1.0f, 3.0f);
                 } else {
                     dir = glm::normalize(dir);
                     float dx = dir.x * npc.speed * deltaTime;
                     float dz = dir.z * npc.speed * deltaTime;
                     
-                    // Stop sliding and check if the direct path is completely clear
                     if (isPositionValid(npc.pos.x + dx, npc.pos.z + dz)) {
                         npc.pos.x += dx;
                         npc.pos.z += dz;
                     } else {
-                        // Bumping into a wall - abort and find a new place to go!
-                        if (npc.hasBounds) {
-                            npc.target = glm::vec3(
-                                randFloat(npc.boundsMin.x, npc.boundsMax.x), 
-                                npc.pos.y, 
-                                randFloat(npc.boundsMin.z, npc.boundsMax.z)
-                            );
-                        } else {
-                            npc.target = glm::vec3(randFloat(-4.0f, 4.0f), 0.0f, randFloat(-25.0f, 25.0f));
-                            if (rand() % 4 == 0) { 
-                                float signX = (rand()%2 == 0) ? -10.0f : 10.0f;
-                                float shopZs[] = {-20, -10, 0, 10, 20};
-                                npc.target = glm::vec3(signX, 0.0f, shopZs[rand()%5]);
-                            }
-                        }
+                        npc.target = glm::vec3(randFloat(-4.0f, 4.0f), 0.0f, randFloat(-25.0f, 25.0f));
                         npc.waitTimer = randFloat(0.5f, 1.5f);
                     }
-
                     npc.rotY = glm::degrees(atan2(dir.x, dir.z));
                 }
             }
-        }
-
-        // Draw Shops, Pillars, and Display Products
-        for (int z = -20; z <= 20; z += 10) {
-            // LEFT SHOPS (Open layout)
-            glm::vec3 lPos(-10.0f, 2.5f, z);
-            drawBox(shaderProgram, VAO, lPos + glm::vec3(-3.9f, 0.0f, 0.0f), glm::vec3(0.2f, 5.0f, 8.0f), glm::vec4(0.8f, 0.8f, 0.8f, 1.0f)); // Back Wall
-            drawBox(shaderProgram, VAO, lPos + glm::vec3(0.0f, 0.0f, -3.9f), glm::vec3(8.0f, 5.0f, 0.2f), glm::vec4(0.8f, 0.8f, 0.8f, 1.0f)); // Side Wall
-            drawBox(shaderProgram, VAO, lPos + glm::vec3(0.0f, 0.0f, 3.9f),  glm::vec3(8.0f, 5.0f, 0.2f), glm::vec4(0.8f, 0.8f, 0.8f, 1.0f)); // Side Wall
-            drawShopInterior(shaderProgram, VAO, glm::vec3(-10.0f, 0.0f, z), true); // Floor 1 Interior
-
-            glm::vec3 lPos2(-10.0f, 7.5f, z);
-            drawBox(shaderProgram, VAO, lPos2 + glm::vec3(-3.9f, 0.0f, 0.0f), glm::vec3(0.2f, 5.0f, 8.0f), glm::vec4(0.8f, 0.8f, 0.8f, 1.0f)); // Back Wall 2
-            drawBox(shaderProgram, VAO, lPos2 + glm::vec3(0.0f, 0.0f, -3.9f), glm::vec3(8.0f, 5.0f, 0.2f), glm::vec4(0.8f, 0.8f, 0.8f, 1.0f)); // Side Wall 2
-            drawBox(shaderProgram, VAO, lPos2 + glm::vec3(0.0f, 0.0f, 3.9f),  glm::vec3(8.0f, 5.0f, 0.2f), glm::vec4(0.8f, 0.8f, 0.8f, 1.0f)); // Side Wall 2
-            drawShopInterior(shaderProgram, VAO, glm::vec3(-10.0f, 5.0f, z), true); // Floor 2 Interior
-            
-            // Left Store Signs (Above the open entrance)
-            glm::vec4 signColorL = glm::vec4(abs(z%3)*0.4f, 0.3f, 0.8f - abs(z%4)*0.1f, 1.0f);
-            drawBox(shaderProgram, VAO, glm::vec3(-6.1f, 4.5f, z), glm::vec3(0.2f, 1.0f, 8.0f), signColorL);
-
-            // RIGHT SHOPS (Open layout)
-            glm::vec3 rPos(10.0f, 2.5f, z);
-            drawBox(shaderProgram, VAO, rPos + glm::vec3(3.9f, 0.0f, 0.0f), glm::vec3(0.2f, 5.0f, 8.0f), glm::vec4(0.8f, 0.8f, 0.8f, 1.0f)); // Back Wall
-            drawBox(shaderProgram, VAO, rPos + glm::vec3(0.0f, 0.0f, -3.9f), glm::vec3(8.0f, 5.0f, 0.2f), glm::vec4(0.8f, 0.8f, 0.8f, 1.0f)); // Side Wall
-            drawBox(shaderProgram, VAO, rPos + glm::vec3(0.0f, 0.0f, 3.9f),  glm::vec3(8.0f, 5.0f, 0.2f), glm::vec4(0.8f, 0.8f, 0.8f, 1.0f)); // Side Wall
-            drawShopInterior(shaderProgram, VAO, glm::vec3(10.0f, 0.0f, z), false); // Floor 1 Interior
-            
-            glm::vec3 rPos2(10.0f, 7.5f, z);
-            drawBox(shaderProgram, VAO, rPos2 + glm::vec3(3.9f, 0.0f, 0.0f), glm::vec3(0.2f, 5.0f, 8.0f), glm::vec4(0.8f, 0.8f, 0.8f, 1.0f)); // Back Wall 2
-            drawBox(shaderProgram, VAO, rPos2 + glm::vec3(0.0f, 0.0f, -3.9f), glm::vec3(8.0f, 5.0f, 0.2f), glm::vec4(0.8f, 0.8f, 0.8f, 1.0f)); // Side Wall 2
-            drawBox(shaderProgram, VAO, rPos2 + glm::vec3(0.0f, 0.0f, 3.9f),  glm::vec3(8.0f, 5.0f, 0.2f), glm::vec4(0.8f, 0.8f, 0.8f, 1.0f)); // Side Wall 2
-            drawShopInterior(shaderProgram, VAO, glm::vec3(10.0f, 5.0f, z), false); // Floor 2 Interior
-
-            // Right Store Signs
-            glm::vec4 signColorR = glm::vec4(0.8f - abs(z%2)*0.2f, abs(z%3)*0.4f, 0.3f, 1.0f);
-            drawBox(shaderProgram, VAO, glm::vec3(6.1f, 4.5f, z), glm::vec3(0.2f, 1.0f, 8.0f), signColorR);
-            
-            // Grand Pillars holding the skylight
-            drawBox(shaderProgram, VAO, glm::vec3(-4.0f, 5.0f, z + 5.0f), glm::vec3(1.0f, 10.0f, 1.0f), glm::vec4(0.9f, 0.9f, 0.95f, 1.0f));
-            drawBox(shaderProgram, VAO, glm::vec3( 4.0f, 5.0f, z + 5.0f), glm::vec3(1.0f, 10.0f, 1.0f), glm::vec4(0.9f, 0.9f, 0.95f, 1.0f));
-
-            // Ground Floor Planters
-            if (z != 0) {
-                drawBox(shaderProgram, VAO, glm::vec3(0.0f, 0.3f, z), glm::vec3(2.5f, 0.6f, 1.5f), glm::vec4(0.4f, 0.3f, 0.2f, 1.0f)); // Wood box
-                drawBox(shaderProgram, VAO, glm::vec3(0.0f, 1.0f, z), glm::vec3(2.0f, 1.0f, 1.0f), glm::vec4(0.2f, 0.6f, 0.2f, 1.0f)); // Leaves
-            }
-        }
-
-        // --- DRAW NPCs ---
-        for(auto& npc : npcList) {
-            float renderY = npc.pos.y; 
-            // Allow stairs to affect render height only for free-roaming mall walkers
-            if (!npc.hasBounds) {
-                renderY = getFloorHeight(npc.pos.x, npc.pos.z) - 1.5f; 
-            }
+            float renderY = getFloorHeight(npc.pos.x, npc.pos.z) - 1.5f; 
             drawMan(shaderProgram, VAO, glm::vec3(npc.pos.x, renderY, npc.pos.z), npc.rotY, npc.color, npc.isWalking, currentFrame);
         }
 
-        // --- DRAW TRANSPARENT OBJECTS LAST ---
-        // (Render order matters for blending: Back to Front is ideal)
-
-        // Glass Skylight Ceiling
-        drawBox(shaderProgram, VAO, glm::vec3(0.0f, 10.25f, 0.0f), glm::vec3(20.0f, 0.2f, 60.0f), glm::vec4(0.6f, 0.8f, 0.9f, 0.3f));
+        // ==========================================
+        // 2. DRAW TRANSPARENT OBJECTS LAST (Crucial for Alpha Blending)
+        // ==========================================
         
+        // Storefront Glass Panels (matType 2)
+        for (int z = -20; z <= 20; z += 10) {
+            for(float y : {0.0f, 5.0f}) { 
+                // Left glass
+                drawBox(shaderProgram, VAO, glm::vec3(-6.0f, y + 2.0f, z - 2.5f), glm::vec3(0.05f, 4.0f, 2.5f), glm::vec4(0.6f, 0.8f, 1.0f, 0.3f), 0.0f, 2);
+                drawBox(shaderProgram, VAO, glm::vec3(-6.0f, y + 2.0f, z + 2.5f), glm::vec3(0.05f, 4.0f, 2.5f), glm::vec4(0.6f, 0.8f, 1.0f, 0.3f), 0.0f, 2);
+                // Right glass
+                drawBox(shaderProgram, VAO, glm::vec3( 6.0f, y + 2.0f, z - 2.5f), glm::vec3(0.05f, 4.0f, 2.5f), glm::vec4(0.6f, 0.8f, 1.0f, 0.3f), 0.0f, 2);
+                drawBox(shaderProgram, VAO, glm::vec3( 6.0f, y + 2.0f, z + 2.5f), glm::vec3(0.05f, 4.0f, 2.5f), glm::vec4(0.6f, 0.8f, 1.0f, 0.3f), 0.0f, 2);
+            }
+        }
+
         // Glass Railings for 2nd Floor Balcony
-        drawBox(shaderProgram, VAO, glm::vec3(-4.1f, 5.5f, 0.0f), glm::vec3(0.2f, 1.5f, 60.0f), glm::vec4(0.7f, 0.9f, 1.0f, 0.4f));
-        drawBox(shaderProgram, VAO, glm::vec3( 4.1f, 5.5f, 0.0f), glm::vec3(0.2f, 1.5f, 60.0f), glm::vec4(0.7f, 0.9f, 1.0f, 0.4f));
+        drawBox(shaderProgram, VAO, glm::vec3(-5.9f, 5.5f, 0.0f), glm::vec3(0.05f, 1.5f, 60.0f), glm::vec4(0.7f, 0.9f, 1.0f, 0.3f), 0.0f, 2);
+        drawBox(shaderProgram, VAO, glm::vec3( 5.9f, 5.5f, 0.0f), glm::vec3(0.05f, 1.5f, 60.0f), glm::vec4(0.7f, 0.9f, 1.0f, 0.3f), 0.0f, 2);
+        
+        // Escalator Glass Sides
+        drawBox(shaderProgram, VAO, glm::vec3(-2.8f, 3.5f, -4.0f), glm::vec3(0.1f, 7.0f, 8.5f), glm::vec4(0.7f, 0.9f, 1.0f, 0.3f), 0.0f, 2);
+        drawBox(shaderProgram, VAO, glm::vec3( 2.8f, 3.5f, -4.0f), glm::vec3(0.1f, 7.0f, 8.5f), glm::vec4(0.7f, 0.9f, 1.0f, 0.3f), 0.0f, 2);
+
+        // Huge Glass Skylight Ceiling
+        drawBox(shaderProgram, VAO, glm::vec3(0.0f, 10.2f, 0.0f), glm::vec3(12.0f, 0.1f, 60.0f), glm::vec4(0.6f, 0.8f, 1.0f, 0.3f), 0.0f, 2);
 
         glfwSwapBuffers(window);
         glfwPollEvents();
