@@ -263,7 +263,7 @@ void initSphere() {
             float zPos = std::sin(xSegment * 2.0f * PI) * std::sin(ySegment * PI);
 
             vertices.push_back(xPos); vertices.push_back(yPos); vertices.push_back(zPos);
-            vertices.push_back(xPos); vertices.push_back(yPos); vertices.push_back(zPos); // Normals
+            vertices.push_back(xPos); vertices.push_back(yPos); vertices.push_back(zPos);
         }
     }
 
@@ -279,7 +279,7 @@ void initSphere() {
         }
     }
 
-    sphereIndexCount = indices.size();
+    sphereIndexCount = static_cast<int>(indices.size());
 
     glGenVertexArrays(1, &sphereVAO);
     glGenBuffers(1, &sphereVBO);
@@ -327,7 +327,11 @@ bool isPositionValid(float x, float y, float z) {
 
     if (z < -24.4f && z > -28.0f && std::abs(x) < 2.5f) {
         if (z > -24.8f && z < -24.4f) {
-            float clearWidth = 0.2f + (elevatorDoors * 1.5f);
+            float currentFloorDoors = 0.0f;
+            if (y < 4.5f && elevatorState == 0) currentFloorDoors = elevatorDoors;
+            else if (y >= 4.5f && elevatorState == 2) currentFloorDoors = elevatorDoors;
+
+            float clearWidth = 0.2f + (currentFloorDoors * 1.5f);
             if (std::abs(x) > clearWidth) return false;
         }
         if (x < -1.9f || x > 1.9f || z < -27.4f) return false;
@@ -361,10 +365,11 @@ bool isPositionValid(float x, float y, float z) {
     }
 
     for (int sz = -20; sz <= 20; sz += 10) {
-        if (std::abs(x) > 6.8f && std::abs(x) < 7.2f && z > sz - 4.5f && z < sz + 4.5f) {
-            if (!(z > sz - 1.5f && z < sz + 1.5f)) return false;
+        if (std::abs(x) > 6.8f && std::abs(x) < 7.2f && z > sz - 5.0f && z < sz + 5.0f) {
+            if (!(z > sz - 1.8f && z < sz + 1.8f)) return false;
         }
-        if (z > sz + 4.5f && z < sz + 5.5f && std::abs(x) > 7.0f) return false;
+        if (z > sz + 4.8f && z < sz + 5.2f && std::abs(x) > 7.0f) return false;
+        if (std::abs(x) > 8.0f && std::abs(x) < 11.8f && z > sz - 1.2f && z < sz + 1.2f) return false;
     }
 
     if (x < -6.0f && z < -24.0f) {
@@ -511,7 +516,6 @@ void drawBox(unsigned int shader, unsigned int VAO, glm::vec3 pos, glm::vec3 sca
     glBindVertexArray(VAO); glDrawArrays(GL_TRIANGLES, 0, 36);
 }
 
-// NEW: Render the mathematically generated sphere
 void drawSphere(unsigned int shader, glm::vec3 pos, float radius, glm::vec4 color, float rotY = 0.0f, int matType = 0) {
     glm::mat4 model = glm::mat4(1.0f);
     model = glm::translate(model, pos);
@@ -543,17 +547,64 @@ void drawNeonText(unsigned int shader, unsigned int VAO, std::string text, glm::
     }
 }
 
-// UPDATED: Now uses drawSphere to give avatars real heads
-void drawShopkeeper(unsigned int shader, unsigned int VAO, glm::vec3 pos, float rotY, glm::vec4 shirtColor) {
-    drawBox(shader, VAO, pos + glm::vec3(0.0f, 0.4f, 0.0f), glm::vec3(0.5f, 0.8f, 0.3f), glm::vec4(0.15f, 0.15f, 0.15f, 1.0f), rotY);
-    drawBox(shader, VAO, pos + glm::vec3(0.0f, 1.15f, 0.0f), glm::vec3(0.6f, 0.7f, 0.35f), shirtColor, rotY, 4);
+void drawCharacter(unsigned int shader, unsigned int VAO, glm::vec3 basePos, float rotY, glm::vec4 shirtColor, float walkCycle) {
+    glm::vec3 pos = basePos;
+    pos.y += abs(sin(walkCycle)) * 0.05f;
 
-    // Proper spherical head instead of a block
-    drawSphere(shader, pos + glm::vec3(0.0f, 1.72f, 0.0f), 0.22f, glm::vec4(0.9f, 0.7f, 0.5f, 1.0f), rotY, 0);
+    float armSwing = sin(walkCycle) * 35.0f;
+    float legSwing = sin(walkCycle) * 25.0f;
 
-    glm::mat4 rMat = glm::rotate(glm::mat4(1.0f), glm::radians(rotY), glm::vec3(0.0f, 1.0f, 0.0f));
-    drawBox(shader, VAO, pos + glm::vec3(rMat * glm::vec4(0.4f, 1.15f, 0.0f, 1.0f)), glm::vec3(0.2f, 0.7f, 0.2f), shirtColor, rotY, 4);
-    drawBox(shader, VAO, pos + glm::vec3(rMat * glm::vec4(-0.4f, 1.15f, 0.0f, 1.0f)), glm::vec3(0.2f, 0.7f, 0.2f), shirtColor, rotY, 4);
+    glm::vec4 skinColor = glm::vec4(0.9f, 0.7f, 0.5f, 1.0f);
+    glm::vec4 pantsColor = glm::vec4(0.15f, 0.15f, 0.15f, 1.0f);
+    glm::vec4 shoeColor = glm::vec4(0.1f, 0.1f, 0.1f, 1.0f);
+
+    drawBox(shader, VAO, pos + glm::vec3(0.0f, 1.55f, 0.0f), glm::vec3(0.15f, 0.15f, 0.15f), skinColor, rotY, 0);
+    drawBox(shader, VAO, pos + glm::vec3(0.0f, 1.25f, 0.0f), glm::vec3(0.7f, 0.45f, 0.35f), shirtColor, rotY, 4);
+    drawBox(shader, VAO, pos + glm::vec3(0.0f, 0.95f, 0.0f), glm::vec3(0.55f, 0.35f, 0.3f), shirtColor * 0.8f, rotY, 4);
+    drawSphere(shader, pos + glm::vec3(0.0f, 1.75f, 0.0f), 0.20f, skinColor, rotY, 0);
+
+    auto drawLimb = [&](glm::vec3 offset, glm::vec3 scale, glm::vec4 color, float swingAngle, int mType, bool isArm) {
+        glm::mat4 model = glm::mat4(1.0f);
+        glm::mat4 rotMat = glm::rotate(glm::mat4(1.0f), glm::radians(rotY), glm::vec3(0.0f, 1.0f, 0.0f));
+        glm::vec3 worldOffset = glm::vec3(rotMat * glm::vec4(offset, 1.0f));
+
+        model = glm::translate(model, pos + worldOffset);
+        model = glm::rotate(model, glm::radians(rotY), glm::vec3(0.0f, 1.0f, 0.0f));
+
+        model = glm::translate(model, glm::vec3(0.0f, scale.y / 2.0f, 0.0f));
+        model = glm::rotate(model, glm::radians(swingAngle), glm::vec3(1.0f, 0.0f, 0.0f));
+        model = glm::translate(model, glm::vec3(0.0f, -scale.y / 2.0f, 0.0f));
+
+        glm::mat4 limbModel = model;
+        model = glm::scale(model, scale);
+
+        glUniformMatrix4fv(glGetUniformLocation(shader, "model"), 1, GL_FALSE, glm::value_ptr(model));
+        glUniform4fv(glGetUniformLocation(shader, "objectColor"), 1, glm::value_ptr(color));
+        glUniform1i(glGetUniformLocation(shader, "matType"), mType);
+        glBindVertexArray(VAO); glDrawArrays(GL_TRIANGLES, 0, 36);
+
+        if (isArm) {
+            glm::mat4 handModel = glm::translate(limbModel, glm::vec3(0.0f, -scale.y / 2.0f - 0.05f, 0.0f));
+            handModel = glm::scale(handModel, glm::vec3(0.12f));
+            glUniformMatrix4fv(glGetUniformLocation(shader, "model"), 1, GL_FALSE, glm::value_ptr(handModel));
+            glUniform4fv(glGetUniformLocation(shader, "objectColor"), 1, glm::value_ptr(skinColor));
+            glUniform1i(glGetUniformLocation(shader, "matType"), 0);
+            glBindVertexArray(sphereVAO); glDrawElements(GL_TRIANGLES, sphereIndexCount, GL_UNSIGNED_INT, 0);
+        }
+        else {
+            glm::mat4 shoeModel = glm::translate(limbModel, glm::vec3(0.0f, -scale.y / 2.0f, 0.08f));
+            shoeModel = glm::scale(shoeModel, glm::vec3(scale.x * 1.1f, 0.15f, scale.z * 1.5f));
+            glUniformMatrix4fv(glGetUniformLocation(shader, "model"), 1, GL_FALSE, glm::value_ptr(shoeModel));
+            glUniform4fv(glGetUniformLocation(shader, "objectColor"), 1, glm::value_ptr(shoeColor));
+            glUniform1i(glGetUniformLocation(shader, "matType"), 0);
+            glBindVertexArray(VAO); glDrawArrays(GL_TRIANGLES, 0, 36);
+        }
+        };
+
+    drawLimb(glm::vec3(-0.15f, 0.45f, 0.0f), glm::vec3(0.2f, 0.9f, 0.25f), pantsColor, legSwing, 0, false);
+    drawLimb(glm::vec3(0.15f, 0.45f, 0.0f), glm::vec3(0.2f, 0.9f, 0.25f), pantsColor, -legSwing, 0, false);
+    drawLimb(glm::vec3(-0.45f, 1.35f, 0.0f), glm::vec3(0.18f, 0.75f, 0.18f), shirtColor, -armSwing, 4, true);
+    drawLimb(glm::vec3(0.45f, 1.35f, 0.0f), glm::vec3(0.18f, 0.75f, 0.18f), shirtColor, armSwing, 4, true);
 }
 
 void drawPlant(unsigned int shader, unsigned int VAO, glm::vec3 pos) {
@@ -641,6 +692,31 @@ void drawMallProps(unsigned int shader, unsigned int VAO) {
 }
 
 // ---------------------------------------------------------
+// UPDATED: FSM Struct for Intelligent Avatars
+// ---------------------------------------------------------
+enum NPCBehavior {
+    WANDER_MALL,
+    GO_TO_ESCALATOR,
+    RIDE_ESCALATOR,
+    GO_TO_ELEVATOR,
+    WAIT_FOR_ELEVATOR,
+    RIDE_ELEVATOR,
+    VISIT_SHOP
+};
+
+struct Shopper {
+    glm::vec3 pos;
+    glm::vec3 dir;
+    glm::vec4 color;
+    float speed;
+    float walkCycle;
+
+    NPCBehavior currentState;
+    glm::vec3 targetPos;
+    float waitTimer;
+};
+
+// ---------------------------------------------------------
 // Main Entry
 // ---------------------------------------------------------
 int main() {
@@ -678,7 +754,6 @@ int main() {
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0); glEnableVertexAttribArray(0);
     glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(3 * sizeof(float))); glEnableVertexAttribArray(1);
 
-    // Initialize Spheres for avatar heads
     initSphere();
 
     unsigned int vShader = glCreateShader(GL_VERTEX_SHADER); glShaderSource(vShader, 1, &vertexShaderSource, NULL); glCompileShader(vShader);
@@ -709,8 +784,40 @@ int main() {
         glm::vec4(0.7f, 0.1f, 1.0f, 1.0f), glm::vec4(0.9f, 0.8f, 0.3f, 1.0f), glm::vec4(1.0f, 0.5f, 0.8f, 1.0f)
     };
 
+    // FIXED: Brain-equipped specialized FSM shoppers
+    std::vector<Shopper> roamingShoppers = {
+        // Shopper 1: Wanders Ground Floor
+        {{ -4.0f, 0.0f,   5.0f }, { 0.0f, 0.0f,  1.0f }, glm::vec4(0.2f, 0.8f, 0.9f, 1.0f), 1.5f, 0.0f, WANDER_MALL, {0,0,0}, 0.0f},
+        // Shopper 2: Goes to Escalator and Rides it Up!
+        {{  4.0f, 0.0f,   5.0f }, { 0.0f, 0.0f, -1.0f }, glm::vec4(1.0f, 0.5f, 0.0f, 1.0f), 1.6f, 2.0f, GO_TO_ESCALATOR, {1.0f, 1.5f, 1.0f}, 0.0f},
+        // Shopper 3: Wanders 2nd Floor
+        {{ -4.0f, 5.0f,  12.0f }, { 0.0f, 0.0f, -1.0f }, glm::vec4(0.3f, 0.9f, 0.4f, 1.0f), 1.4f, 1.5f, WANDER_MALL, {0,0,0}, 0.0f},
+        // Shopper 4: Goes to Elevator and rides it Down!
+        {{  4.0f, 5.0f,  -2.0f }, { 0.0f, 0.0f, -1.0f }, glm::vec4(0.8f, 0.8f, 0.2f, 1.0f), 1.5f, 3.5f, GO_TO_ELEVATOR, {0.0f, 6.5f, -22.0f}, 0.0f},
+        // Shopper 5: Browses a specific shop
+        {{  0.0f, 0.0f,  18.0f }, { 0.0f, 0.0f, -1.0f }, glm::vec4(0.6f, 0.2f, 0.9f, 1.0f), 1.6f, 4.0f, VISIT_SHOP, {-8.0f, 1.5f, 10.0f}, 0.0f}
+    };
+
+    std::vector<Shopper> activeShopkeepers;
+    int shopIdxLoad = 0;
+    for (int z = -20; z <= 20; z += 10) {
+        for (float y : {0.0f, 5.0f}) {
+            activeShopkeepers.push_back({
+                glm::vec3(-12.5f, y, z), glm::vec3(0.0f, 0.0f, 1.0f),
+                keeperColorsL[shopIdxLoad], 1.0f + (rand() % 10) / 20.0f, static_cast<float>(rand() % 10),
+                WANDER_MALL, {0,0,0}, 0.0f
+                });
+            activeShopkeepers.push_back({
+                glm::vec3(12.5f, y, z), glm::vec3(0.0f, 0.0f, -1.0f),
+                keeperColorsR[shopIdxLoad], 1.0f + (rand() % 10) / 20.0f, static_cast<float>(rand() % 10),
+                WANDER_MALL, {0,0,0}, 0.0f
+                });
+        }
+        shopIdxLoad++;
+    }
+
     std::cout << "--- VIRTUAL MALL 2.0 ---" << std::endl;
-    std::cout << "Check out the new avatars with procedurally generated spherical heads!" << std::endl;
+    std::cout << "FSM Architecture loaded! Watch the orange avatar ride the escalator and the yellow avatar catch the elevator." << std::endl;
 
     while (!glfwWindowShouldClose(window)) {
         float currentFrame = static_cast<float>(glfwGetTime()); deltaTime = currentFrame - lastFrame; lastFrame = currentFrame; programTime += deltaTime;
@@ -758,7 +865,7 @@ int main() {
         drawCar(shaderProgram, VAO, glm::vec3(6.0f, -0.1f, 32.0f), -90.0f, glm::vec4(0.1f, 0.1f, 0.8f, 1.0f));
 
         // ==========================================
-        // 2. MALL INTERIOR STRUCTURE 
+        // 2. MALL INTERIOR STRUCTURE
         // ==========================================
         drawBox(shaderProgram, VAO, glm::vec3(0.0f, -0.25f, 0.0f), glm::vec3(40.0f, 0.5f, 56.0f), glm::vec4(0.4f, 0.4f, 0.45f, 1.0f), 0.0f, 1);
 
@@ -820,79 +927,255 @@ int main() {
         // ==========================================
         drawElevator(shaderProgram, VAO);
 
-        glm::vec4 shaftSteel = glm::vec4(0.3f, 0.3f, 0.35f, 1.0f);
+        glm::vec4 shaftWallCol = glm::vec4(0.2f, 0.2f, 0.22f, 1.0f);
+        glm::vec4 metalDoorCol = glm::vec4(0.5f, 0.5f, 0.55f, 1.0f);
+        glm::vec4 premiumMetal = glm::vec4(0.8f, 0.8f, 0.85f, 1.0f);
+
         for (float yLvl : {0.0f, 5.0f}) {
-            drawBox(shaderProgram, VAO, glm::vec3(-2.2f, yLvl + 1.5f, -24.5f), glm::vec3(0.6f, 3.0f, 0.2f), shaftSteel, 0.0f, 8);
-            drawBox(shaderProgram, VAO, glm::vec3(2.2f, yLvl + 1.5f, -24.5f), glm::vec3(0.6f, 3.0f, 0.2f), shaftSteel, 0.0f, 8);
-            drawBox(shaderProgram, VAO, glm::vec3(0.0f, yLvl + 3.2f, -24.5f), glm::vec3(5.0f, 0.4f, 0.2f), shaftSteel, 0.0f, 8);
+            drawBox(shaderProgram, VAO, glm::vec3(-2.95f, yLvl + 2.5f, -24.5f), glm::vec3(2.1f, 5.0f, 0.2f), shaftWallCol, 0.0f, 1);
+            drawBox(shaderProgram, VAO, glm::vec3(2.95f, yLvl + 2.5f, -24.5f), glm::vec3(2.1f, 5.0f, 0.2f), shaftWallCol, 0.0f, 1);
+            drawBox(shaderProgram, VAO, glm::vec3(0.0f, yLvl + 4.0f, -24.5f), glm::vec3(3.8f, 2.0f, 0.2f), shaftWallCol, 0.0f, 1);
+
+            float currentFloorDoors = 0.0f;
+            if (yLvl == 0.0f && elevatorState == 0) currentFloorDoors = elevatorDoors;
+            if (yLvl == 5.0f && elevatorState == 2) currentFloorDoors = elevatorDoors;
+
+            float sDoorL = -0.95f - (currentFloorDoors * 0.95f);
+            float sDoorR = 0.95f + (currentFloorDoors * 0.95f);
+            drawBox(shaderProgram, VAO, glm::vec3(sDoorL, yLvl + 1.5f, -24.5f), glm::vec3(1.9f, 3.0f, 0.05f), metalDoorCol, 0.0f, 8);
+            drawBox(shaderProgram, VAO, glm::vec3(sDoorR, yLvl + 1.5f, -24.5f), glm::vec3(1.9f, 3.0f, 0.05f), metalDoorCol, 0.0f, 8);
+
+            drawBox(shaderProgram, VAO, glm::vec3(-1.95f, yLvl + 1.5f, -24.45f), glm::vec3(0.1f, 3.0f, 0.1f), premiumMetal, 0.0f, 8);
+            drawBox(shaderProgram, VAO, glm::vec3(1.95f, yLvl + 1.5f, -24.45f), glm::vec3(0.1f, 3.0f, 0.1f), premiumMetal, 0.0f, 8);
+            drawBox(shaderProgram, VAO, glm::vec3(0.0f, yLvl + 3.05f, -24.45f), glm::vec3(4.0f, 0.1f, 0.1f), premiumMetal, 0.0f, 8);
 
             glm::vec4 indCol = (elevatorState == 0 || elevatorState == 2) ? glm::vec4(0.0f, 1.0f, 0.0f, 1.0f) : glm::vec4(1.0f, 0.0f, 0.0f, 1.0f);
-            drawBox(shaderProgram, VAO, glm::vec3(0.0f, yLvl + 3.2f, -24.39f), glm::vec3(0.8f, 0.1f, 0.05f), indCol, 0.0f, 4);
+            drawBox(shaderProgram, VAO, glm::vec3(0.0f, yLvl + 3.2f, -24.4f), glm::vec3(0.8f, 0.1f, 0.05f), indCol, 0.0f, 4);
         }
 
         drawMallProps(shaderProgram, VAO);
+
+        // ==========================================
+        // 4. ANIMATED AVATARS (FSM AI LOGIC)
+        // ==========================================
+        for (auto& shopper : roamingShoppers) {
+            bool isWalking = false;
+
+            switch (shopper.currentState) {
+            case WANDER_MALL: {
+                glm::vec3 nextPos = shopper.pos + shopper.dir * (shopper.speed * deltaTime);
+                // FIXED: Padded collision bounds so shoulders don't clip walls
+                if (isPositionValid(nextPos.x + (shopper.dir.x * 0.4f), nextPos.y + 1.5f, nextPos.z + (shopper.dir.z * 0.4f))) {
+                    shopper.pos = nextPos;
+                }
+                else {
+                    float angle = (rand() % 360) * 3.14159f / 180.0f;
+                    shopper.dir = glm::vec3(cos(angle), 0.0f, sin(angle));
+                }
+                isWalking = true;
+                break;
+            }
+            case GO_TO_ESCALATOR: {
+                glm::vec3 diff = shopper.targetPos - shopper.pos;
+                diff.y = 0;
+                if (glm::length(diff) > 0.2f) {
+                    shopper.dir = glm::normalize(diff);
+                    shopper.pos += shopper.dir * shopper.speed * deltaTime;
+                    isWalking = true;
+                }
+                else {
+                    shopper.currentState = RIDE_ESCALATOR;
+                }
+                break;
+            }
+            case RIDE_ESCALATOR: {
+                if (shopper.pos.x > 0.0f) {
+                    shopper.dir = glm::vec3(0.0f, 0.0f, -1.0f);
+                    shopper.pos.z -= 2.5f * deltaTime;
+                    if (shopper.pos.z <= -10.5f) shopper.currentState = WANDER_MALL;
+                }
+                else {
+                    shopper.dir = glm::vec3(0.0f, 0.0f, 1.0f);
+                    shopper.pos.z += 2.5f * deltaTime;
+                    if (shopper.pos.z >= 0.5f) shopper.currentState = WANDER_MALL;
+                }
+                isWalking = false; // Stand still while riding
+                break;
+            }
+            case GO_TO_ELEVATOR: {
+                glm::vec3 diff = shopper.targetPos - shopper.pos;
+                diff.y = 0;
+                if (glm::length(diff) > 0.2f) {
+                    shopper.dir = glm::normalize(diff);
+                    shopper.pos += shopper.dir * shopper.speed * deltaTime;
+                    isWalking = true;
+                }
+                else {
+                    shopper.currentState = WAIT_FOR_ELEVATOR;
+                    shopper.dir = glm::vec3(0.0f, 0.0f, -1.0f);
+                }
+                break;
+            }
+            case WAIT_FOR_ELEVATOR: {
+                isWalking = false;
+                bool elevatorHere = (abs(elevatorY - (shopper.pos.y + 1.5f)) < 1.0f);
+                bool doorsOpen = (elevatorDoors > 0.8f);
+
+                if (elevatorHere && doorsOpen) {
+                    shopper.targetPos = glm::vec3(0.0f, shopper.pos.y, -26.0f);
+                    glm::vec3 diff = shopper.targetPos - shopper.pos;
+                    diff.y = 0;
+                    if (glm::length(diff) > 0.2f) {
+                        shopper.dir = glm::normalize(diff);
+                        shopper.pos += shopper.dir * shopper.speed * deltaTime;
+                        isWalking = true;
+                    }
+                    else {
+                        shopper.currentState = RIDE_ELEVATOR;
+                        shopper.dir = glm::vec3(0.0f, 0.0f, 1.0f);
+                    }
+                }
+                break;
+            }
+            case RIDE_ELEVATOR: {
+                isWalking = false;
+                shopper.pos.y = elevatorY - 1.5f;
+
+                bool doorsOpen = (elevatorDoors > 0.8f);
+                if (doorsOpen && (elevatorState == 0 || elevatorState == 2)) {
+                    shopper.targetPos = glm::vec3(0.0f, shopper.pos.y, -20.0f);
+                    glm::vec3 diff = shopper.targetPos - shopper.pos;
+                    diff.y = 0;
+                    if (glm::length(diff) > 0.2f) {
+                        shopper.dir = glm::normalize(diff);
+                        shopper.pos += shopper.dir * shopper.speed * deltaTime;
+                        isWalking = true;
+                    }
+                    else {
+                        shopper.currentState = WANDER_MALL;
+                    }
+                }
+                break;
+            }
+            case VISIT_SHOP: {
+                glm::vec3 diff = shopper.targetPos - shopper.pos;
+                diff.y = 0;
+                if (glm::length(diff) > 0.2f) {
+                    shopper.dir = glm::normalize(diff);
+                    shopper.pos += shopper.dir * shopper.speed * deltaTime;
+                    isWalking = true;
+                }
+                else {
+                    shopper.waitTimer += deltaTime;
+                    isWalking = false;
+                    if (shopper.waitTimer > 5.0f) {
+                        shopper.currentState = WANDER_MALL;
+                        float angle = (rand() % 360) * 3.14159f / 180.0f;
+                        shopper.dir = glm::vec3(cos(angle), 0.0f, sin(angle));
+                    }
+                }
+                break;
+            }
+            }
+
+            if (shopper.currentState != RIDE_ELEVATOR) {
+                shopper.pos.y = getFloorHeight(shopper.pos.x, shopper.pos.y + 1.5f, shopper.pos.z) - 1.5f;
+            }
+
+            if (isWalking) {
+                shopper.walkCycle += deltaTime * shopper.speed * 4.0f;
+            }
+            else {
+                shopper.walkCycle = 0.0f;
+            }
+
+            float rotY = glm::degrees(atan2(shopper.dir.x, shopper.dir.z));
+            drawCharacter(shaderProgram, VAO, shopper.pos, rotY, shopper.color, shopper.walkCycle);
+        }
+
+        // ==========================================
+        // 5. SEAMLESS SHOPS AND SHOPKEEPERS
+        // ==========================================
+        for (auto& keeper : activeShopkeepers) {
+            glm::vec3 nextPos = keeper.pos + keeper.dir * (keeper.speed * deltaTime);
+            if (isPositionValid(nextPos.x + (keeper.dir.x * 0.4f), nextPos.y + 1.5f, nextPos.z + (keeper.dir.z * 0.4f))) {
+                keeper.pos = nextPos;
+            }
+            else {
+                keeper.dir *= -1.0f;
+            }
+            keeper.pos.y = getFloorHeight(keeper.pos.x, keeper.pos.y + 1.5f, keeper.pos.z) - 1.5f;
+            keeper.walkCycle += deltaTime * keeper.speed * 4.0f;
+            float rotY = (keeper.dir.z > 0.0f) ? 0.0f : 180.0f;
+            drawCharacter(shaderProgram, VAO, keeper.pos, rotY, keeper.color, keeper.walkCycle);
+        }
 
         int shopIdx = 0;
         for (int z = -20; z <= 20; z += 10) {
             for (float y : {0.0f, 5.0f}) {
                 glm::vec3 lPos(-10.0f, y + 2.5f, z);
-                drawBox(shaderProgram, VAO, lPos + glm::vec3(-3.9f, 0.0f, 0.0f), glm::vec3(0.2f, 5.0f, 8.0f), shopBaseColor);
-                drawBox(shaderProgram, VAO, lPos + glm::vec3(0.0f, 0.0f, -3.9f), glm::vec3(8.0f, 5.0f, 0.2f), shopBaseColor);
-                drawBox(shaderProgram, VAO, lPos + glm::vec3(0.0f, 0.0f, 3.9f), glm::vec3(8.0f, 5.0f, 0.2f), shopBaseColor);
+                drawBox(shaderProgram, VAO, lPos + glm::vec3(-3.9f, 0.0f, 0.0f), glm::vec3(0.2f, 5.0f, 10.0f), shopBaseColor);
+                drawBox(shaderProgram, VAO, lPos + glm::vec3(0.0f, 0.0f, -5.0f), glm::vec3(8.0f, 5.0f, 0.2f), shopBaseColor);
+                drawBox(shaderProgram, VAO, lPos + glm::vec3(0.0f, 0.0f, 5.0f), glm::vec3(8.0f, 5.0f, 0.2f), shopBaseColor);
 
-                drawBox(shaderProgram, VAO, lPos + glm::vec3(3.0f, 0.0f, -2.5f), glm::vec3(0.2f, 5.0f, 3.0f), glm::vec4(0.05f, 0.05f, 0.05f, 1.0f), 0.0f, 8);
-                drawBox(shaderProgram, VAO, lPos + glm::vec3(3.0f, 0.0f, 2.5f), glm::vec3(0.2f, 5.0f, 3.0f), glm::vec4(0.05f, 0.05f, 0.05f, 1.0f), 0.0f, 8);
-                drawBox(shaderProgram, VAO, lPos + glm::vec3(3.0f, 2.0f, 0.0f), glm::vec3(0.2f, 1.0f, 8.0f), glm::vec4(0.05f, 0.05f, 0.05f, 1.0f), 0.0f, 8);
+                drawBox(shaderProgram, VAO, lPos + glm::vec3(3.0f, 0.0f, -3.4f), glm::vec3(0.2f, 5.0f, 3.2f), glm::vec4(0.05f, 0.05f, 0.05f, 1.0f), 0.0f, 8);
+                drawBox(shaderProgram, VAO, lPos + glm::vec3(3.0f, 0.0f, 3.4f), glm::vec3(0.2f, 5.0f, 3.2f), glm::vec4(0.05f, 0.05f, 0.05f, 1.0f), 0.0f, 8);
+                drawBox(shaderProgram, VAO, lPos + glm::vec3(3.0f, 2.0f, 0.0f), glm::vec3(0.2f, 1.0f, 10.0f), glm::vec4(0.05f, 0.05f, 0.05f, 1.0f), 0.0f, 8);
 
                 glm::vec4 sColL = glm::vec4(0.2f + abs(z % 3) * 0.4f, 0.8f, 0.9f - abs(z % 4) * 0.2f, 1.0f);
                 drawBox(shaderProgram, VAO, glm::vec3(-6.85f, y + 4.2f, z), glm::vec3(0.05f, 1.2f, 4.0f), glm::vec4(0.02f, 0.02f, 0.02f, 1.0f), 0.0f, 8);
                 drawNeonText(shaderProgram, VAO, shopNamesL[shopIdx], glm::vec3(-6.8f, y + 4.2f, z), 0.08f, sColL, 90.0f);
+
                 drawBox(shaderProgram, VAO, glm::vec3(-10.0f, y + 0.5f, z), glm::vec3(3.0f, 1.0f, 2.0f), sColL * 0.5f);
                 drawNeonText(shaderProgram, VAO, "SALE", glm::vec3(-8.4f, y + 1.3f, z), 0.05f, glm::vec4(1.0f, 1.0f, 1.0f, 1.0f), 90.0f);
 
-                drawShopkeeper(shaderProgram, VAO, glm::vec3(-11.5f, y, z), 90.0f, keeperColorsL[shopIdx]);
-
                 glm::vec3 rPos(10.0f, y + 2.5f, z);
-                drawBox(shaderProgram, VAO, rPos + glm::vec3(3.9f, 0.0f, 0.0f), glm::vec3(0.2f, 5.0f, 8.0f), shopBaseColor);
-                drawBox(shaderProgram, VAO, rPos + glm::vec3(0.0f, 0.0f, -3.9f), glm::vec3(8.0f, 5.0f, 0.2f), shopBaseColor);
-                drawBox(shaderProgram, VAO, rPos + glm::vec3(0.0f, 0.0f, 3.9f), glm::vec3(8.0f, 5.0f, 0.2f), shopBaseColor);
+                drawBox(shaderProgram, VAO, rPos + glm::vec3(3.9f, 0.0f, 0.0f), glm::vec3(0.2f, 5.0f, 10.0f), shopBaseColor);
+                drawBox(shaderProgram, VAO, rPos + glm::vec3(0.0f, 0.0f, -5.0f), glm::vec3(8.0f, 5.0f, 0.2f), shopBaseColor);
+                drawBox(shaderProgram, VAO, rPos + glm::vec3(0.0f, 0.0f, 5.0f), glm::vec3(8.0f, 5.0f, 0.2f), shopBaseColor);
 
-                drawBox(shaderProgram, VAO, rPos + glm::vec3(-3.0f, 0.0f, -2.5f), glm::vec3(0.2f, 5.0f, 3.0f), glm::vec4(0.05f, 0.05f, 0.05f, 1.0f), 0.0f, 8);
-                drawBox(shaderProgram, VAO, rPos + glm::vec3(-3.0f, 0.0f, 2.5f), glm::vec3(0.2f, 5.0f, 3.0f), glm::vec4(0.05f, 0.05f, 0.05f, 1.0f), 0.0f, 8);
-                drawBox(shaderProgram, VAO, rPos + glm::vec3(-3.0f, 2.0f, 0.0f), glm::vec3(0.2f, 1.0f, 8.0f), glm::vec4(0.05f, 0.05f, 0.05f, 1.0f), 0.0f, 8);
+                drawBox(shaderProgram, VAO, rPos + glm::vec3(-3.0f, 0.0f, -3.4f), glm::vec3(0.2f, 5.0f, 3.2f), glm::vec4(0.05f, 0.05f, 0.05f, 1.0f), 0.0f, 8);
+                drawBox(shaderProgram, VAO, rPos + glm::vec3(-3.0f, 0.0f, 3.4f), glm::vec3(0.2f, 5.0f, 3.2f), glm::vec4(0.05f, 0.05f, 0.05f, 1.0f), 0.0f, 8);
+                drawBox(shaderProgram, VAO, rPos + glm::vec3(-3.0f, 2.0f, 0.0f), glm::vec3(0.2f, 1.0f, 10.0f), glm::vec4(0.05f, 0.05f, 0.05f, 1.0f), 0.0f, 8);
 
                 glm::vec4 sColR = glm::vec4(0.9f, 0.3f + abs(z % 2) * 0.3f, 0.3f, 1.0f);
                 drawBox(shaderProgram, VAO, glm::vec3(6.85f, y + 4.2f, z), glm::vec3(0.05f, 1.2f, 4.0f), glm::vec4(0.02f, 0.02f, 0.02f, 1.0f), 0.0f, 8);
                 drawNeonText(shaderProgram, VAO, shopNamesR[shopIdx], glm::vec3(6.8f, y + 4.2f, z), 0.08f, sColR, -90.0f);
+
                 drawBox(shaderProgram, VAO, glm::vec3(10.0f, y + 0.5f, z), glm::vec3(3.0f, 1.0f, 2.0f), sColR * 0.5f);
                 drawNeonText(shaderProgram, VAO, "NEW", glm::vec3(8.4f, y + 1.3f, z), 0.05f, glm::vec4(1.0f, 1.0f, 1.0f, 1.0f), -90.0f);
-
-                drawShopkeeper(shaderProgram, VAO, glm::vec3(11.5f, y, z), -90.0f, keeperColorsR[shopIdx]);
             }
-            drawBox(shaderProgram, VAO, glm::vec3(-7.0f, 5.0f, z + 4.8f), glm::vec3(0.8f, 10.0f, 0.8f), glm::vec4(0.15f, 0.15f, 0.15f, 1.0f), 0.0f, 1);
-            drawBox(shaderProgram, VAO, glm::vec3(7.0f, 5.0f, z + 4.8f), glm::vec3(0.8f, 10.0f, 0.8f), glm::vec4(0.15f, 0.15f, 0.15f, 1.0f), 0.0f, 1);
             shopIdx++;
         }
 
         // ==========================================
-        // 4. TRANSPARENT OBJECTS (Draw Last)
+        // 6. TRANSPARENT OBJECTS (Draw Last)
         // ==========================================
-
         glm::vec4 gateGlassColor = glm::vec4(0.0f, 1.0f, 0.7f, 0.5f);
-        drawBox(shaderProgram, VAO, glm::vec3(-1.5f - doorOffset, 2.5f, 28.0f), glm::vec3(2.6f, 4.6f, 0.1f), gateGlassColor, 0.0f, 2);
-        drawBox(shaderProgram, VAO, glm::vec3(1.5f + doorOffset, 2.5f, 28.0f), glm::vec3(2.6f, 4.6f, 0.1f), gateGlassColor, 0.0f, 2);
 
-        drawBox(shaderProgram, VAO, glm::vec3(0.0f, 4.5f, 27.95f), glm::vec3(1.5f, 0.5f, 0.05f), glm::vec4(0.02f, 0.02f, 0.02f, 1.0f), 0.0f, 8);
-        drawNeonText(shaderProgram, VAO, "EXIT", glm::vec3(0.0f, 4.5f, 27.9f), 0.05f, glm::vec4(1.0f, 0.0f, 0.0f, 1.0f), 180.0f);
+        float lX = -1.5f - doorOffset;
+        drawBox(shaderProgram, VAO, glm::vec3(lX, 2.4f, 28.0f), glm::vec3(2.8f, 4.8f, 0.05f), gateGlassColor, 0.0f, 2);
+        drawBox(shaderProgram, VAO, glm::vec3(lX - 1.4f, 2.4f, 28.0f), glm::vec3(0.1f, 4.8f, 0.1f), premiumMetal, 0.0f, 8);
+        drawBox(shaderProgram, VAO, glm::vec3(lX + 1.4f, 2.4f, 28.0f), glm::vec3(0.1f, 4.8f, 0.1f), premiumMetal, 0.0f, 8);
+        drawBox(shaderProgram, VAO, glm::vec3(lX, 0.05f, 28.0f), glm::vec3(3.0f, 0.1f, 0.1f), premiumMetal, 0.0f, 8);
+        drawBox(shaderProgram, VAO, glm::vec3(lX, 4.75f, 28.0f), glm::vec3(3.0f, 0.1f, 0.1f), premiumMetal, 0.0f, 8);
+
+        float rX = 1.5f + doorOffset;
+        drawBox(shaderProgram, VAO, glm::vec3(rX, 2.4f, 28.0f), glm::vec3(2.8f, 4.8f, 0.05f), gateGlassColor, 0.0f, 2);
+        drawBox(shaderProgram, VAO, glm::vec3(rX - 1.4f, 2.4f, 28.0f), glm::vec3(0.1f, 4.8f, 0.1f), premiumMetal, 0.0f, 8);
+        drawBox(shaderProgram, VAO, glm::vec3(rX + 1.4f, 2.4f, 28.0f), glm::vec3(0.1f, 4.8f, 0.1f), premiumMetal, 0.0f, 8);
+        drawBox(shaderProgram, VAO, glm::vec3(rX, 0.05f, 28.0f), glm::vec3(3.0f, 0.1f, 0.1f), premiumMetal, 0.0f, 8);
+        drawBox(shaderProgram, VAO, glm::vec3(rX, 4.75f, 28.0f), glm::vec3(3.0f, 0.1f, 0.1f), premiumMetal, 0.0f, 8);
 
         for (int z = -20; z <= 20; z += 10) {
             for (float y : {0.0f, 5.0f}) {
-                drawBox(shaderProgram, VAO, glm::vec3(-7.0f, y + 2.0f, z - 2.5f), glm::vec3(0.05f, 4.0f, 2.5f), glm::vec4(0.6f, 0.8f, 1.0f, 0.3f), 0.0f, 2);
-                drawBox(shaderProgram, VAO, glm::vec3(-7.0f, y + 2.0f, z + 2.5f), glm::vec3(0.05f, 4.0f, 2.5f), glm::vec4(0.6f, 0.8f, 1.0f, 0.3f), 0.0f, 2);
-                drawBox(shaderProgram, VAO, glm::vec3(7.0f, y + 2.0f, z - 2.5f), glm::vec3(0.05f, 4.0f, 2.5f), glm::vec4(0.6f, 0.8f, 1.0f, 0.3f), 0.0f, 2);
-                drawBox(shaderProgram, VAO, glm::vec3(7.0f, y + 2.0f, z + 2.5f), glm::vec3(0.05f, 4.0f, 2.5f), glm::vec4(0.6f, 0.8f, 1.0f, 0.3f), 0.0f, 2);
-                drawBox(shaderProgram, VAO, glm::vec3(-7.0f, y + 2.0f, z), glm::vec3(0.05f, 4.0f, 2.0f), glm::vec4(0.6f, 0.8f, 1.0f, 0.1f), 0.0f, 2);
-                drawBox(shaderProgram, VAO, glm::vec3(7.0f, y + 2.0f, z), glm::vec3(0.05f, 4.0f, 2.0f), glm::vec4(0.6f, 0.8f, 1.0f, 0.1f), 0.0f, 2);
+                drawBox(shaderProgram, VAO, glm::vec3(-7.0f, y + 2.0f, z - 3.4f), glm::vec3(0.05f, 4.0f, 3.2f), glm::vec4(0.6f, 0.8f, 1.0f, 0.3f), 0.0f, 2);
+                drawBox(shaderProgram, VAO, glm::vec3(-7.0f, y + 2.0f, z + 3.4f), glm::vec3(0.05f, 4.0f, 3.2f), glm::vec4(0.6f, 0.8f, 1.0f, 0.3f), 0.0f, 2);
+                drawBox(shaderProgram, VAO, glm::vec3(7.0f, y + 2.0f, z - 3.4f), glm::vec3(0.05f, 4.0f, 3.2f), glm::vec4(0.6f, 0.8f, 1.0f, 0.3f), 0.0f, 2);
+                drawBox(shaderProgram, VAO, glm::vec3(7.0f, y + 2.0f, z + 3.4f), glm::vec3(0.05f, 4.0f, 3.2f), glm::vec4(0.6f, 0.8f, 1.0f, 0.3f), 0.0f, 2);
+
+                drawBox(shaderProgram, VAO, glm::vec3(-7.0f, y + 2.0f, z), glm::vec3(0.05f, 4.0f, 3.6f), glm::vec4(0.6f, 0.8f, 1.0f, 0.1f), 0.0f, 2);
+                drawBox(shaderProgram, VAO, glm::vec3(7.0f, y + 2.0f, z), glm::vec3(0.05f, 4.0f, 3.6f), glm::vec4(0.6f, 0.8f, 1.0f, 0.1f), 0.0f, 2);
             }
         }
 
