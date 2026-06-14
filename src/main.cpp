@@ -35,7 +35,7 @@ bool isGrounded = true;
 
 // Dynamic Mall States
 float entranceOpenness = 0.0f;
-float elevatorY = 1.5f; // Tracks Camera Eye Level
+float elevatorY = 1.5f;
 int elevatorState = 0;
 float elevatorTimer = 0.0f;
 float elevatorDoors = 0.0f;
@@ -43,6 +43,12 @@ float elevatorDoors = 0.0f;
 // Interactivity
 bool flashlightOn = false;
 bool fKeyPressed = false;
+
+// ---------------------------------------------------------
+// Sphere Generation Variables
+// ---------------------------------------------------------
+unsigned int sphereVAO = 0, sphereVBO, sphereEBO;
+int sphereIndexCount = 0;
 
 // ---------------------------------------------------------
 // Voxel Font System (For Neon Signs) A-Z
@@ -239,6 +245,59 @@ void main() {
 )";
 
 // ---------------------------------------------------------
+// Initialization: Geometric Spheres
+// ---------------------------------------------------------
+void initSphere() {
+    std::vector<float> vertices;
+    std::vector<unsigned int> indices;
+    int xSegments = 30;
+    int ySegments = 30;
+    const float PI = 3.14159265359f;
+
+    for (int y = 0; y <= ySegments; ++y) {
+        for (int x = 0; x <= xSegments; ++x) {
+            float xSegment = (float)x / (float)xSegments;
+            float ySegment = (float)y / (float)ySegments;
+            float xPos = std::cos(xSegment * 2.0f * PI) * std::sin(ySegment * PI);
+            float yPos = std::cos(ySegment * PI);
+            float zPos = std::sin(xSegment * 2.0f * PI) * std::sin(ySegment * PI);
+
+            vertices.push_back(xPos); vertices.push_back(yPos); vertices.push_back(zPos);
+            vertices.push_back(xPos); vertices.push_back(yPos); vertices.push_back(zPos); // Normals
+        }
+    }
+
+    for (int y = 0; y < ySegments; ++y) {
+        for (int x = 0; x < xSegments; ++x) {
+            indices.push_back((y + 1) * (xSegments + 1) + x);
+            indices.push_back(y * (xSegments + 1) + x);
+            indices.push_back(y * (xSegments + 1) + x + 1);
+
+            indices.push_back((y + 1) * (xSegments + 1) + x);
+            indices.push_back(y * (xSegments + 1) + x + 1);
+            indices.push_back((y + 1) * (xSegments + 1) + x + 1);
+        }
+    }
+
+    sphereIndexCount = indices.size();
+
+    glGenVertexArrays(1, &sphereVAO);
+    glGenBuffers(1, &sphereVBO);
+    glGenBuffers(1, &sphereEBO);
+
+    glBindVertexArray(sphereVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, sphereVBO);
+    glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(float), &vertices[0], GL_STATIC_DRAW);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, sphereEBO);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int), &indices[0], GL_STATIC_DRAW);
+
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(3 * sizeof(float)));
+    glEnableVertexAttribArray(1);
+}
+
+// ---------------------------------------------------------
 // Physics & Collision Subsystem
 // ---------------------------------------------------------
 float getFloorHeight(float x, float currentY, float z) {
@@ -246,7 +305,6 @@ float getFloorHeight(float x, float currentY, float z) {
         float clampedZ = glm::clamp(z, -10.0f, 0.0f);
         return 1.5f + (((0.0f - clampedZ) / 10.0f) * 5.0f);
     }
-    // Elevator is now cleanly tracked by an override, so we just return normal mall floors here
     if (currentY > 4.5f && z <= 28.0f) return 6.5f;
     if (z > 29.0f) return 1.3f;
     return 1.5f;
@@ -267,13 +325,12 @@ bool isPositionValid(float x, float y, float z) {
         if (std::abs(x) > clearWidth) return false;
     }
 
-    // Elevator Shaft Collision
     if (z < -24.4f && z > -28.0f && std::abs(x) < 2.5f) {
         if (z > -24.8f && z < -24.4f) {
             float clearWidth = 0.2f + (elevatorDoors * 1.5f);
             if (std::abs(x) > clearWidth) return false;
         }
-        if (x < -1.9f || x > 1.9f || z < -27.4f) return false; // Solid Shaft Walls
+        if (x < -1.9f || x > 1.9f || z < -27.4f) return false;
     }
 
     if (z > 28.0f) {
@@ -328,10 +385,10 @@ void updateDynamics() {
     else entranceOpenness = std::max(entranceOpenness - deltaTime * 2.0f, 0.0f);
 
     elevatorTimer += deltaTime;
-    float elvSpeed = 2.5f; // Faster modern elevator
+    float elvSpeed = 2.5f;
     if (elevatorState == 0) {
         elevatorDoors = std::min(elevatorDoors + deltaTime * 2.0f, 1.0f);
-        if (elevatorTimer > 6.0f) { elevatorState = 1; elevatorTimer = 0.0f; } // Wait 6 secs
+        if (elevatorTimer > 6.0f) { elevatorState = 1; elevatorTimer = 0.0f; }
     }
     else if (elevatorState == 1) {
         elevatorDoors = std::max(elevatorDoors - deltaTime * 3.0f, 0.0f);
@@ -403,9 +460,8 @@ void processInput(GLFWwindow* window) {
     float currentFloorHeight = getFloorHeight(cameraPos.x, cameraPos.y, cameraPos.z);
     bool onElevator = (cameraPos.x >= -1.9f && cameraPos.x <= 1.9f && cameraPos.z >= -27.4f && cameraPos.z <= -24.6f);
 
-    // FIXED: Flawless override for elevator tracking
     if (onElevator) {
-        cameraPos.y = elevatorY; // Eye level lock
+        cameraPos.y = elevatorY;
         velocityY = 0.0f;
         isGrounded = true;
     }
@@ -455,6 +511,20 @@ void drawBox(unsigned int shader, unsigned int VAO, glm::vec3 pos, glm::vec3 sca
     glBindVertexArray(VAO); glDrawArrays(GL_TRIANGLES, 0, 36);
 }
 
+// NEW: Render the mathematically generated sphere
+void drawSphere(unsigned int shader, glm::vec3 pos, float radius, glm::vec4 color, float rotY = 0.0f, int matType = 0) {
+    glm::mat4 model = glm::mat4(1.0f);
+    model = glm::translate(model, pos);
+    if (rotY != 0.0f) model = glm::rotate(model, glm::radians(rotY), glm::vec3(0.0f, 1.0f, 0.0f));
+    model = glm::scale(model, glm::vec3(radius));
+    glUniformMatrix4fv(glGetUniformLocation(shader, "model"), 1, GL_FALSE, glm::value_ptr(model));
+    glUniform4fv(glGetUniformLocation(shader, "objectColor"), 1, glm::value_ptr(color));
+    glUniform1i(glGetUniformLocation(shader, "matType"), matType);
+
+    glBindVertexArray(sphereVAO);
+    glDrawElements(GL_TRIANGLES, sphereIndexCount, GL_UNSIGNED_INT, 0);
+}
+
 void drawNeonText(unsigned int shader, unsigned int VAO, std::string text, glm::vec3 pos, float scale, glm::vec4 color, float rotY = 0.0f) {
     float cursorX = -(text.length() * 4.0f * scale) / 2.0f;
     for (char c : text) {
@@ -473,10 +543,14 @@ void drawNeonText(unsigned int shader, unsigned int VAO, std::string text, glm::
     }
 }
 
+// UPDATED: Now uses drawSphere to give avatars real heads
 void drawShopkeeper(unsigned int shader, unsigned int VAO, glm::vec3 pos, float rotY, glm::vec4 shirtColor) {
     drawBox(shader, VAO, pos + glm::vec3(0.0f, 0.4f, 0.0f), glm::vec3(0.5f, 0.8f, 0.3f), glm::vec4(0.15f, 0.15f, 0.15f, 1.0f), rotY);
-    drawBox(shader, VAO, pos + glm::vec3(0.0f, 1.15f, 0.0f), glm::vec3(0.6f, 0.7f, 0.35f), shirtColor, rotY, 4); // Neon glow
-    drawBox(shader, VAO, pos + glm::vec3(0.0f, 1.65f, 0.0f), glm::vec3(0.35f, 0.35f, 0.35f), glm::vec4(0.9f, 0.7f, 0.5f, 1.0f), rotY);
+    drawBox(shader, VAO, pos + glm::vec3(0.0f, 1.15f, 0.0f), glm::vec3(0.6f, 0.7f, 0.35f), shirtColor, rotY, 4);
+
+    // Proper spherical head instead of a block
+    drawSphere(shader, pos + glm::vec3(0.0f, 1.72f, 0.0f), 0.22f, glm::vec4(0.9f, 0.7f, 0.5f, 1.0f), rotY, 0);
+
     glm::mat4 rMat = glm::rotate(glm::mat4(1.0f), glm::radians(rotY), glm::vec3(0.0f, 1.0f, 0.0f));
     drawBox(shader, VAO, pos + glm::vec3(rMat * glm::vec4(0.4f, 1.15f, 0.0f, 1.0f)), glm::vec3(0.2f, 0.7f, 0.2f), shirtColor, rotY, 4);
     drawBox(shader, VAO, pos + glm::vec3(rMat * glm::vec4(-0.4f, 1.15f, 0.0f, 1.0f)), glm::vec3(0.2f, 0.7f, 0.2f), shirtColor, rotY, 4);
@@ -499,26 +573,20 @@ void drawFountain(unsigned int shader, unsigned int VAO, glm::vec3 pos) {
 }
 
 void drawElevator(unsigned int shader, unsigned int VAO) {
-    // FIXED: Real-World Elevator Architecture
-    float baseY = elevatorY - 1.5f; // Translate eye level to floor level
+    float baseY = elevatorY - 1.5f;
     glm::vec3 pos(0.0f, baseY, -26.0f);
 
     glm::vec4 steelCol = glm::vec4(0.6f, 0.6f, 0.65f, 1.0f);
 
-    // Premium Steel Cabin Walls
-    drawBox(shader, VAO, pos + glm::vec3(0.0f, 1.5f, -1.4f), glm::vec3(3.8f, 3.0f, 0.1f), steelCol, 0.0f, 8); // Back
-    drawBox(shader, VAO, pos + glm::vec3(-1.9f, 1.5f, 0.0f), glm::vec3(0.1f, 3.0f, 2.8f), steelCol, 0.0f, 8); // Left
-    drawBox(shader, VAO, pos + glm::vec3(1.9f, 1.5f, 0.0f), glm::vec3(0.1f, 3.0f, 2.8f), steelCol, 0.0f, 8); // Right
+    drawBox(shader, VAO, pos + glm::vec3(0.0f, 1.5f, -1.4f), glm::vec3(3.8f, 3.0f, 0.1f), steelCol, 0.0f, 8);
+    drawBox(shader, VAO, pos + glm::vec3(-1.9f, 1.5f, 0.0f), glm::vec3(0.1f, 3.0f, 2.8f), steelCol, 0.0f, 8);
+    drawBox(shader, VAO, pos + glm::vec3(1.9f, 1.5f, 0.0f), glm::vec3(0.1f, 3.0f, 2.8f), steelCol, 0.0f, 8);
 
-    // Glossy Back Mirror
     drawBox(shader, VAO, pos + glm::vec3(0.0f, 1.5f, -1.34f), glm::vec3(3.0f, 2.0f, 0.05f), glm::vec4(0.2f, 0.2f, 0.2f, 1.0f), 0.0f, 1);
 
-    // Matte Black Grip Floor
     drawBox(shader, VAO, pos + glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(3.8f, 0.1f, 2.8f), glm::vec4(0.1f, 0.1f, 0.1f, 1.0f), 0.0f, 5);
-    // Emissive LED Ceiling Light
     drawBox(shader, VAO, pos + glm::vec3(0.0f, 3.0f, 0.0f), glm::vec3(3.6f, 0.1f, 2.6f), glm::vec4(1.0f, 1.0f, 0.95f, 1.0f), 0.0f, 4);
 
-    // Dynamic Proper Split Sliding Doors
     float doorL = -0.95f - (elevatorDoors * 0.95f);
     float doorR = 0.95f + (elevatorDoors * 0.95f);
     drawBox(shader, VAO, pos + glm::vec3(doorL, 1.5f, 1.4f), glm::vec3(1.9f, 3.0f, 0.08f), steelCol, 0.0f, 8);
@@ -610,6 +678,9 @@ int main() {
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0); glEnableVertexAttribArray(0);
     glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(3 * sizeof(float))); glEnableVertexAttribArray(1);
 
+    // Initialize Spheres for avatar heads
+    initSphere();
+
     unsigned int vShader = glCreateShader(GL_VERTEX_SHADER); glShaderSource(vShader, 1, &vertexShaderSource, NULL); glCompileShader(vShader);
     unsigned int fShader = glCreateShader(GL_FRAGMENT_SHADER); glShaderSource(fShader, 1, &fragmentShaderSource, NULL); glCompileShader(fShader);
     unsigned int shaderProgram = glCreateProgram(); glAttachShader(shaderProgram, vShader); glAttachShader(shaderProgram, fShader); glLinkProgram(shaderProgram);
@@ -639,7 +710,7 @@ int main() {
     };
 
     std::cout << "--- VIRTUAL MALL 2.0 ---" << std::endl;
-    std::cout << "Find the premium real-world elevator in the back." << std::endl;
+    std::cout << "Check out the new avatars with procedurally generated spherical heads!" << std::endl;
 
     while (!glfwWindowShouldClose(window)) {
         float currentFrame = static_cast<float>(glfwGetTime()); deltaTime = currentFrame - lastFrame; lastFrame = currentFrame; programTime += deltaTime;
@@ -749,14 +820,12 @@ int main() {
         // ==========================================
         drawElevator(shaderProgram, VAO);
 
-        // Render external shaft structural elements on both 1F and 2F
         glm::vec4 shaftSteel = glm::vec4(0.3f, 0.3f, 0.35f, 1.0f);
         for (float yLvl : {0.0f, 5.0f}) {
-            drawBox(shaderProgram, VAO, glm::vec3(-2.2f, yLvl + 1.5f, -24.5f), glm::vec3(0.6f, 3.0f, 0.2f), shaftSteel, 0.0f, 8); // L Frame
-            drawBox(shaderProgram, VAO, glm::vec3(2.2f, yLvl + 1.5f, -24.5f), glm::vec3(0.6f, 3.0f, 0.2f), shaftSteel, 0.0f, 8); // R Frame
-            drawBox(shaderProgram, VAO, glm::vec3(0.0f, yLvl + 3.2f, -24.5f), glm::vec3(5.0f, 0.4f, 0.2f), shaftSteel, 0.0f, 8); // Top Frame
+            drawBox(shaderProgram, VAO, glm::vec3(-2.2f, yLvl + 1.5f, -24.5f), glm::vec3(0.6f, 3.0f, 0.2f), shaftSteel, 0.0f, 8);
+            drawBox(shaderProgram, VAO, glm::vec3(2.2f, yLvl + 1.5f, -24.5f), glm::vec3(0.6f, 3.0f, 0.2f), shaftSteel, 0.0f, 8);
+            drawBox(shaderProgram, VAO, glm::vec3(0.0f, yLvl + 3.2f, -24.5f), glm::vec3(5.0f, 0.4f, 0.2f), shaftSteel, 0.0f, 8);
 
-            // LED Status Indicator Light (Green = Safe to board, Red = Moving)
             glm::vec4 indCol = (elevatorState == 0 || elevatorState == 2) ? glm::vec4(0.0f, 1.0f, 0.0f, 1.0f) : glm::vec4(1.0f, 0.0f, 0.0f, 1.0f);
             drawBox(shaderProgram, VAO, glm::vec3(0.0f, yLvl + 3.2f, -24.39f), glm::vec3(0.8f, 0.1f, 0.05f), indCol, 0.0f, 4);
         }
@@ -844,5 +913,6 @@ int main() {
     }
 
     glDeleteVertexArrays(1, &VAO); glDeleteBuffers(1, &VBO);
+    glDeleteVertexArrays(1, &sphereVAO); glDeleteBuffers(1, &sphereVBO); glDeleteBuffers(1, &sphereEBO);
     glDeleteProgram(shaderProgram); glfwTerminate(); return 0;
 }
