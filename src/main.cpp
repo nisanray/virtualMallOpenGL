@@ -40,9 +40,13 @@ int elevatorState = 0;
 float elevatorTimer = 0.0f;
 float elevatorDoors = 0.0f;
 
-// Interactivity
+// Interactivity & Time of Day
+bool isNight = false;
+bool nKeyPressed = false;
 bool flashlightOn = false;
 bool fKeyPressed = false;
+bool droneMode = false;
+bool vKeyPressed = false;
 
 // ---------------------------------------------------------
 // Sphere Generation Variables
@@ -133,6 +137,7 @@ uniform vec3 pointLightColors[NR_POINT_LIGHTS];
 
 uniform vec3 spotLightPos; uniform vec3 spotLightDir; uniform vec3 spotLightColor;
 uniform float spotCutOff; uniform float spotOuterCutOff; uniform bool flashlightOn;
+uniform bool isNight;
 
 vec4 getMaterialProps() {
     vec3 albedo = objectColor.rgb;
@@ -238,7 +243,9 @@ void main() {
 
     float distance = length(viewPos - FragPos);
     float fogFactor = clamp((distance - 35.0) / 45.0, 0.0, 1.0);
-    vec3 skyColor = vec3(0.01, 0.01, 0.03); 
+    
+    // Dynamic Sky Color based on time of day
+    vec3 skyColor = isNight ? vec3(0.01, 0.01, 0.03) : vec3(0.55, 0.75, 0.95); 
     
     FragColor = vec4(mix(result, skyColor, fogFactor), alpha);
 }
@@ -417,14 +424,28 @@ void updateDynamics() {
 
 void processInput(GLFWwindow* window) {
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) glfwSetWindowShouldClose(window, true);
+
     if (glfwGetKey(window, GLFW_KEY_T) == GLFW_PRESS) {
-        if (!tKeyPressed) { tourMode = !tourMode; tKeyPressed = true; if (!tourMode) firstMouse = true; }
+        if (!tKeyPressed) { tourMode = !tourMode; droneMode = false; tKeyPressed = true; if (!tourMode) firstMouse = true; }
     }
     else tKeyPressed = false;
+
     if (glfwGetKey(window, GLFW_KEY_F) == GLFW_PRESS) {
         if (!fKeyPressed) { flashlightOn = !flashlightOn; fKeyPressed = true; }
     }
     else fKeyPressed = false;
+
+    // Day / Night Toggle
+    if (glfwGetKey(window, GLFW_KEY_N) == GLFW_PRESS) {
+        if (!nKeyPressed) { isNight = !isNight; nKeyPressed = true; }
+    }
+    else nKeyPressed = false;
+
+    // Drone View Toggle
+    if (glfwGetKey(window, GLFW_KEY_V) == GLFW_PRESS) {
+        if (!vKeyPressed) { droneMode = !droneMode; tourMode = false; vKeyPressed = true; }
+    }
+    else vKeyPressed = false;
 
     if (tourMode) {
         float tourSpeed = 0.15f; tourProgress += deltaTime * tourSpeed;
@@ -436,54 +457,68 @@ void processInput(GLFWwindow* window) {
         pitch = glm::degrees(asin(cameraFront.y)); yaw = glm::degrees(atan2(cameraFront.z, cameraFront.x));
         return;
     }
+    else if (droneMode) {
+        // Free Flight (No gravity, no collision limits)
+        float cameraSpeed = 12.0f * deltaTime;
+        if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) cameraPos += cameraFront * cameraSpeed;
+        if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) cameraPos -= cameraFront * cameraSpeed;
+        if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) cameraPos -= glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeed;
+        if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) cameraPos += glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeed;
+        if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS) cameraPos += cameraUp * cameraSpeed; // Fly Up
+        if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS) cameraPos -= cameraUp * cameraSpeed; // Fly Down
 
-    float cameraSpeed = 6.0f * deltaTime;
-    float moveX = 0.0f, moveZ = 0.0f;
-    glm::vec3 flatFront = glm::normalize(glm::vec3(cameraFront.x, 0.0f, cameraFront.z));
-    glm::vec3 flatRight = glm::normalize(glm::cross(flatFront, cameraUp));
-
-    if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) { moveX += flatFront.x; moveZ += flatFront.z; }
-    if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) { moveX -= flatFront.x; moveZ -= flatFront.z; }
-    if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) { moveX -= flatRight.x; moveZ -= flatRight.z; }
-    if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) { moveX += flatRight.x; moveZ += flatRight.z; }
-
-    if (moveX != 0.0f || moveZ != 0.0f) {
-        glm::vec3 moveDir = glm::normalize(glm::vec3(moveX, 0.0f, moveZ));
-        float dx = moveDir.x * cameraSpeed; float dz = moveDir.z * cameraSpeed;
-        if (isPositionValid(cameraPos.x + dx, cameraPos.y, cameraPos.z)) cameraPos.x += dx;
-        if (isPositionValid(cameraPos.x, cameraPos.y, cameraPos.z + dz)) cameraPos.z += dz;
+        velocityY = 0.0f; // Disable physics gravity
     }
+    else {
+        // Standard Grounded Movement
+        float cameraSpeed = 6.0f * deltaTime;
+        float moveX = 0.0f, moveZ = 0.0f;
+        glm::vec3 flatFront = glm::normalize(glm::vec3(cameraFront.x, 0.0f, cameraFront.z));
+        glm::vec3 flatRight = glm::normalize(glm::cross(flatFront, cameraUp));
 
-    if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS && isGrounded) { velocityY = jumpForce; isGrounded = false; }
+        if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) { moveX += flatFront.x; moveZ += flatFront.z; }
+        if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) { moveX -= flatFront.x; moveZ -= flatFront.z; }
+        if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) { moveX -= flatRight.x; moveZ -= flatRight.z; }
+        if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) { moveX += flatRight.x; moveZ += flatRight.z; }
 
-    velocityY -= gravity * deltaTime;
-    cameraPos.y += velocityY * deltaTime;
-
-    float ceilH = getCeilingHeight(cameraPos.x, cameraPos.y, cameraPos.z);
-    if (cameraPos.y + 0.4f > ceilH) { cameraPos.y = ceilH - 0.4f; if (velocityY > 0) velocityY = 0.0f; }
-
-    float currentFloorHeight = getFloorHeight(cameraPos.x, cameraPos.y, cameraPos.z);
-    bool onElevator = (cameraPos.x >= -1.9f && cameraPos.x <= 1.9f && cameraPos.z >= -27.4f && cameraPos.z <= -24.6f);
-
-    if (onElevator) {
-        cameraPos.y = elevatorY;
-        velocityY = 0.0f;
-        isGrounded = true;
-    }
-    else if (cameraPos.y <= currentFloorHeight) {
-        cameraPos.y = currentFloorHeight;
-        velocityY = 0.0f;
-        isGrounded = true;
-    }
-
-    if (isGrounded && cameraPos.x >= -2.0f && cameraPos.x <= 2.0f && cameraPos.z >= -10.0f && cameraPos.z <= 0.0f) {
-        if (cameraPos.x > 0.0f) {
-            float autoMove = 2.5f * deltaTime;
-            if (isPositionValid(cameraPos.x, cameraPos.y, cameraPos.z - autoMove)) cameraPos.z -= autoMove;
+        if (moveX != 0.0f || moveZ != 0.0f) {
+            glm::vec3 moveDir = glm::normalize(glm::vec3(moveX, 0.0f, moveZ));
+            float dx = moveDir.x * cameraSpeed; float dz = moveDir.z * cameraSpeed;
+            if (isPositionValid(cameraPos.x + dx, cameraPos.y, cameraPos.z)) cameraPos.x += dx;
+            if (isPositionValid(cameraPos.x, cameraPos.y, cameraPos.z + dz)) cameraPos.z += dz;
         }
-        else {
-            float autoMove = 2.5f * deltaTime;
-            if (isPositionValid(cameraPos.x, cameraPos.y, cameraPos.z + autoMove)) cameraPos.z += autoMove;
+
+        if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS && isGrounded) { velocityY = jumpForce; isGrounded = false; }
+
+        velocityY -= gravity * deltaTime;
+        cameraPos.y += velocityY * deltaTime;
+
+        float ceilH = getCeilingHeight(cameraPos.x, cameraPos.y, cameraPos.z);
+        if (cameraPos.y + 0.4f > ceilH) { cameraPos.y = ceilH - 0.4f; if (velocityY > 0) velocityY = 0.0f; }
+
+        float currentFloorHeight = getFloorHeight(cameraPos.x, cameraPos.y, cameraPos.z);
+        bool onElevator = (cameraPos.x >= -1.9f && cameraPos.x <= 1.9f && cameraPos.z >= -27.4f && cameraPos.z <= -24.6f);
+
+        if (onElevator) {
+            cameraPos.y = elevatorY;
+            velocityY = 0.0f;
+            isGrounded = true;
+        }
+        else if (cameraPos.y <= currentFloorHeight) {
+            cameraPos.y = currentFloorHeight;
+            velocityY = 0.0f;
+            isGrounded = true;
+        }
+
+        if (isGrounded && cameraPos.x >= -2.0f && cameraPos.x <= 2.0f && cameraPos.z >= -10.0f && cameraPos.z <= 0.0f) {
+            if (cameraPos.x > 0.0f) {
+                float autoMove = 2.5f * deltaTime;
+                if (isPositionValid(cameraPos.x, cameraPos.y, cameraPos.z - autoMove)) cameraPos.z -= autoMove;
+            }
+            else {
+                float autoMove = 2.5f * deltaTime;
+                if (isPositionValid(cameraPos.x, cameraPos.y, cameraPos.z + autoMove)) cameraPos.z += autoMove;
+            }
         }
     }
 }
@@ -563,19 +598,19 @@ void drawCharacter(unsigned int shader, unsigned int VAO, glm::vec3 basePos, flo
     drawBox(shader, VAO, pos + glm::vec3(0.0f, 0.95f, 0.0f), glm::vec3(0.55f, 0.35f, 0.3f), shirtColor * 0.8f, rotY, 4);
     drawSphere(shader, pos + glm::vec3(0.0f, 1.75f, 0.0f), 0.20f, skinColor, rotY, 0);
 
-    auto drawLimb = [&](glm::vec3 offset, glm::vec3 scale, glm::vec4 color, float swingAngle, int mType, bool isArm) {
+    auto drawLimb = [&](glm::vec3 jointOffset, glm::vec3 scale, glm::vec4 color, float swingAngle, int mType, bool isArm) {
         glm::mat4 model = glm::mat4(1.0f);
         glm::mat4 rotMat = glm::rotate(glm::mat4(1.0f), glm::radians(rotY), glm::vec3(0.0f, 1.0f, 0.0f));
-        glm::vec3 worldOffset = glm::vec3(rotMat * glm::vec4(offset, 1.0f));
+        glm::vec3 worldJoint = glm::vec3(rotMat * glm::vec4(jointOffset, 1.0f));
 
-        model = glm::translate(model, pos + worldOffset);
-        model = glm::rotate(model, glm::radians(rotY), glm::vec3(0.0f, 1.0f, 0.0f));
+        model = glm::translate(model, pos + worldJoint); // Move to the joint's attachment point
+        model = glm::rotate(model, glm::radians(rotY), glm::vec3(0.0f, 1.0f, 0.0f)); // Face character direction
+        model = glm::rotate(model, glm::radians(swingAngle), glm::vec3(1.0f, 0.0f, 0.0f)); // Swing the limb
 
-        model = glm::translate(model, glm::vec3(0.0f, scale.y / 2.0f, 0.0f));
-        model = glm::rotate(model, glm::radians(swingAngle), glm::vec3(1.0f, 0.0f, 0.0f));
+        // Shift the limb mesh DOWNwards so its top aligns with the joint pivot point
         model = glm::translate(model, glm::vec3(0.0f, -scale.y / 2.0f, 0.0f));
 
-        glm::mat4 limbModel = model;
+        glm::mat4 limbModel = model; // Save for extremity attachments (hands/feet)
         model = glm::scale(model, scale);
 
         glUniformMatrix4fv(glGetUniformLocation(shader, "model"), 1, GL_FALSE, glm::value_ptr(model));
@@ -601,10 +636,10 @@ void drawCharacter(unsigned int shader, unsigned int VAO, glm::vec3 basePos, flo
         }
         };
 
-    drawLimb(glm::vec3(-0.15f, 0.45f, 0.0f), glm::vec3(0.2f, 0.9f, 0.25f), pantsColor, legSwing, 0, false);
-    drawLimb(glm::vec3(0.15f, 0.45f, 0.0f), glm::vec3(0.2f, 0.9f, 0.25f), pantsColor, -legSwing, 0, false);
-    drawLimb(glm::vec3(-0.45f, 1.35f, 0.0f), glm::vec3(0.18f, 0.75f, 0.18f), shirtColor, -armSwing, 4, true);
-    drawLimb(glm::vec3(0.45f, 1.35f, 0.0f), glm::vec3(0.18f, 0.75f, 0.18f), shirtColor, armSwing, 4, true);
+    drawLimb(glm::vec3(-0.15f, 0.90f, 0.0f), glm::vec3(0.2f, 0.9f, 0.25f), pantsColor, legSwing, 0, false);
+    drawLimb(glm::vec3(0.15f, 0.90f, 0.0f), glm::vec3(0.2f, 0.9f, 0.25f), pantsColor, -legSwing, 0, false);
+    drawLimb(glm::vec3(-0.42f, 1.45f, 0.0f), glm::vec3(0.16f, 0.75f, 0.16f), shirtColor, -armSwing, 4, true);
+    drawLimb(glm::vec3(0.42f, 1.45f, 0.0f), glm::vec3(0.16f, 0.75f, 0.16f), shirtColor, armSwing, 4, true);
 }
 
 void drawPlant(unsigned int shader, unsigned int VAO, glm::vec3 pos) {
@@ -671,6 +706,16 @@ void drawMallProps(unsigned int shader, unsigned int VAO) {
     drawBox(shader, VAO, glm::vec3(0.0f, 1.5f, 10.0f), glm::vec3(2.0f, 1.5f, 0.2f), glm::vec4(0.1f, 0.1f, 0.1f, 1.0f), 0.0f, 8);
     drawBox(shader, VAO, glm::vec3(0.0f, 1.5f, 10.01f), glm::vec3(1.8f, 1.3f, 0.2f), glm::vec4(0.2f, 0.8f, 0.9f, 1.0f), 0.0f, 4);
     drawNeonText(shader, VAO, "MALL MAP", glm::vec3(0.0f, 2.3f, 10.011f), 0.08f, glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
+
+    std::string mapMsg = "DIRECTORY *** L1: FASHION CAFE *** L2: TECH SHOES *** ";
+    int mapLen = mapMsg.length();
+    int mapOffset = static_cast<int>(programTime * 5.0f) % mapLen;
+    std::string mapVis;
+    for (int i = 0; i < 14; i++) {
+        mapVis += mapMsg[(mapOffset + i) % mapLen];
+    }
+    drawNeonText(shader, VAO, mapVis, glm::vec3(0.0f, 1.5f, 10.12f), 0.045f, glm::vec4(1.0f, 1.0f, 0.2f, 1.0f));
+
     drawBox(shader, VAO, glm::vec3(0.0f, 0.4f, 10.0f), glm::vec3(0.4f, 0.8f, 0.4f), glm::vec4(0.4f, 0.4f, 0.4f, 1.0f), 0.0f, 8);
 
     for (float z : {-15.0f, 15.0f}) {
@@ -686,13 +731,162 @@ void drawMallProps(unsigned int shader, unsigned int VAO) {
         drawPlant(shader, VAO, glm::vec3(2.5f, 0.0f, z - 2.0f));
     }
 
+    // Interactive Billboard Display (Red Kiosk)
     drawBox(shader, VAO, glm::vec3(-2.6f, 1.0f, 12.0f), glm::vec3(1.0f, 2.0f, 0.8f), glm::vec4(0.8f, 0.1f, 0.1f, 1.0f));
     drawBox(shader, VAO, glm::vec3(-2.55f, 1.2f, 12.4f), glm::vec3(0.8f, 1.2f, 0.1f), glm::vec4(0.8f, 0.9f, 1.0f, 0.3f), 0.0f, 2);
     drawBox(shader, VAO, glm::vec3(-2.6f, 1.8f, 12.41f), glm::vec3(0.8f, 0.2f, 0.05f), glm::vec4(1.0f, 1.0f, 1.0f, 1.0f), 0.0f, 4);
+
+    drawNeonText(shader, VAO, "INFO", glm::vec3(-2.6f, 1.6f, 12.46f), 0.06f, glm::vec4(0.2f, 0.8f, 1.0f, 1.0f));
+
+    // Scrolling Marquee Logic
+    std::string fullMsg = "WELCOME TO STARLIGHT MALL  ---  MEGA SALE  ---  ";
+    int len = fullMsg.length();
+    int offset = static_cast<int>(programTime * 4.0f) % len;
+    std::string visibleMsg;
+    for (int i = 0; i < 11; i++) {
+        visibleMsg += fullMsg[(offset + i) % len];
+    }
+    drawNeonText(shader, VAO, visibleMsg, glm::vec3(-2.55f, 1.25f, 12.46f), 0.04f, glm::vec4(1.0f, 1.0f, 0.2f, 1.0f));
 }
 
 // ---------------------------------------------------------
-// UPDATED: FSM Struct for Intelligent Avatars
+// NEW: Shop Product Generation Logic
+// ---------------------------------------------------------
+void drawProducts(unsigned int shader, unsigned int VAO, std::string type, glm::vec3 pos, float rotY) {
+    // Generates a local coordinate system matching the shop's facing direction
+    glm::mat4 rotMatrix = glm::rotate(glm::mat4(1.0f), glm::radians(rotY), glm::vec3(0.0f, 1.0f, 0.0f));
+
+    auto drawLocalBox = [&](glm::vec3 offset, glm::vec3 scale, glm::vec4 color, float localRotY = 0.0f, int mat = 0) {
+        glm::vec3 worldPos = pos + glm::vec3(rotMatrix * glm::vec4(offset, 1.0f));
+        drawBox(shader, VAO, worldPos, scale, color, rotY + localRotY, mat);
+        };
+    auto drawLocalSphere = [&](glm::vec3 offset, float radius, glm::vec4 color, int mat = 0) {
+        glm::vec3 worldPos = pos + glm::vec3(rotMatrix * glm::vec4(offset, 1.0f));
+        drawSphere(shader, worldPos, radius, color, rotY, mat);
+        };
+
+    if (type == "STYLE") {
+        // Display Table
+        drawLocalBox(glm::vec3(0.0f, 0.4f, 0.0f), glm::vec3(1.4f, 0.8f, 0.8f), glm::vec4(0.8f, 0.8f, 0.8f, 1.0f));
+        // Folded Shirts
+        drawLocalBox(glm::vec3(-0.4f, 0.85f, 0.0f), glm::vec3(0.3f, 0.1f, 0.4f), glm::vec4(0.2f, 0.4f, 0.8f, 1.0f));
+        drawLocalBox(glm::vec3(-0.4f, 0.95f, 0.0f), glm::vec3(0.3f, 0.1f, 0.4f), glm::vec4(0.8f, 0.2f, 0.2f, 1.0f));
+        drawLocalBox(glm::vec3(0.4f, 0.9f, 0.0f), glm::vec3(0.3f, 0.2f, 0.4f), glm::vec4(0.2f, 0.8f, 0.4f, 1.0f));
+        // Mannequin
+        drawLocalBox(glm::vec3(1.2f, 0.9f, 0.0f), glm::vec3(0.2f, 0.8f, 0.2f), glm::vec4(0.1f, 0.1f, 0.1f, 1.0f)); // Stand
+        drawLocalBox(glm::vec3(1.2f, 1.5f, 0.0f), glm::vec3(0.5f, 0.6f, 0.25f), glm::vec4(0.9f, 0.2f, 0.3f, 1.0f)); // Torso
+        drawLocalSphere(glm::vec3(1.2f, 1.9f, 0.0f), 0.15f, glm::vec4(0.9f, 0.9f, 0.9f, 1.0f)); // Head
+    }
+    else if (type == "GAMES") {
+        // Arcade Machine
+        drawLocalBox(glm::vec3(0.0f, 0.6f, 0.0f), glm::vec3(0.8f, 1.2f, 0.8f), glm::vec4(0.15f, 0.15f, 0.15f, 1.0f)); // Base
+        drawLocalBox(glm::vec3(0.0f, 1.25f, 0.2f), glm::vec3(0.8f, 0.1f, 0.4f), glm::vec4(0.3f, 0.3f, 0.3f, 1.0f)); // Control Panel
+        drawLocalBox(glm::vec3(0.0f, 1.6f, -0.1f), glm::vec3(0.8f, 0.6f, 0.6f), glm::vec4(0.1f, 0.1f, 0.1f, 1.0f)); // Screen Housing
+        drawLocalBox(glm::vec3(0.0f, 1.6f, 0.21f), glm::vec3(0.7f, 0.5f, 0.05f), glm::vec4(0.1f, 0.8f, 0.2f, 1.0f), 0.0f, 4); // Glowing Screen
+        drawLocalBox(glm::vec3(0.0f, 1.95f, -0.1f), glm::vec3(0.8f, 0.2f, 0.7f), glm::vec4(0.9f, 0.1f, 0.9f, 1.0f), 0.0f, 4); // Glowing Marquee
+    }
+    else if (type == "CAFE") {
+        // Coffee Table
+        drawLocalBox(glm::vec3(0.0f, 0.4f, 0.0f), glm::vec3(0.1f, 0.8f, 0.1f), glm::vec4(0.2f, 0.2f, 0.2f, 1.0f)); // Leg
+        drawLocalBox(glm::vec3(0.0f, 0.8f, 0.0f), glm::vec3(1.0f, 0.05f, 1.0f), glm::vec4(0.6f, 0.4f, 0.2f, 1.0f)); // Top
+        // Chairs
+        drawLocalBox(glm::vec3(-0.7f, 0.45f, 0.0f), glm::vec3(0.4f, 0.05f, 0.4f), glm::vec4(0.8f, 0.3f, 0.3f, 1.0f)); // Seat 1
+        drawLocalBox(glm::vec3(-0.85f, 0.7f, 0.0f), glm::vec3(0.05f, 0.5f, 0.4f), glm::vec4(0.8f, 0.3f, 0.3f, 1.0f)); // Back 1
+        drawLocalBox(glm::vec3(0.7f, 0.45f, 0.0f), glm::vec3(0.4f, 0.05f, 0.4f), glm::vec4(0.8f, 0.3f, 0.3f, 1.0f)); // Seat 2
+        drawLocalBox(glm::vec3(0.85f, 0.7f, 0.0f), glm::vec3(0.05f, 0.5f, 0.4f), glm::vec4(0.8f, 0.3f, 0.3f, 1.0f)); // Back 2
+        // Coffee Mug & Plant
+        drawLocalBox(glm::vec3(-0.2f, 0.88f, 0.1f), glm::vec3(0.1f, 0.15f, 0.1f), glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
+        drawLocalBox(glm::vec3(0.2f, 0.88f, -0.1f), glm::vec3(0.15f, 0.1f, 0.15f), glm::vec4(0.3f, 0.2f, 0.1f, 1.0f));
+        drawLocalBox(glm::vec3(0.2f, 1.0f, -0.1f), glm::vec3(0.1f, 0.2f, 0.1f), glm::vec4(0.2f, 0.8f, 0.2f, 1.0f), 0.0f, 7);
+    }
+    else if (type == "BOOKS") {
+        // Bookshelf
+        drawLocalBox(glm::vec3(0.0f, 1.0f, -0.4f), glm::vec3(2.0f, 2.0f, 0.05f), glm::vec4(0.3f, 0.2f, 0.1f, 1.0f)); // Back
+        drawLocalBox(glm::vec3(-0.95f, 1.0f, -0.2f), glm::vec3(0.05f, 2.0f, 0.4f), glm::vec4(0.3f, 0.2f, 0.1f, 1.0f)); // L Side
+        drawLocalBox(glm::vec3(0.95f, 1.0f, -0.2f), glm::vec3(0.05f, 2.0f, 0.4f), glm::vec4(0.3f, 0.2f, 0.1f, 1.0f)); // R Side
+        // Shelves & Books
+        for (float y : {0.2f, 0.8f, 1.4f}) {
+            drawLocalBox(glm::vec3(0.0f, y, -0.2f), glm::vec3(1.9f, 0.05f, 0.4f), glm::vec4(0.3f, 0.2f, 0.1f, 1.0f));
+            drawLocalBox(glm::vec3(-0.6f, y + 0.15f, -0.2f), glm::vec3(0.08f, 0.25f, 0.2f), glm::vec4(0.8f, 0.1f, 0.1f, 1.0f));
+            drawLocalBox(glm::vec3(-0.4f, y + 0.13f, -0.2f), glm::vec3(0.06f, 0.2f, 0.2f), glm::vec4(0.1f, 0.3f, 0.8f, 1.0f));
+            drawLocalBox(glm::vec3(0.2f, y + 0.18f, -0.2f), glm::vec3(0.08f, 0.3f, 0.25f), glm::vec4(0.1f, 0.8f, 0.3f, 1.0f));
+            drawLocalBox(glm::vec3(0.3f, y + 0.15f, -0.2f), glm::vec3(0.05f, 0.25f, 0.2f), glm::vec4(0.9f, 0.8f, 0.1f, 1.0f));
+        }
+    }
+    else if (type == "SPORT") {
+        // Weight Rack
+        drawLocalBox(glm::vec3(-0.8f, 0.6f, 0.0f), glm::vec3(0.1f, 1.2f, 0.4f), glm::vec4(0.2f, 0.2f, 0.2f, 1.0f));
+        drawLocalBox(glm::vec3(0.8f, 0.6f, 0.0f), glm::vec3(0.1f, 1.2f, 0.4f), glm::vec4(0.2f, 0.2f, 0.2f, 1.0f));
+        // Barbell
+        drawLocalBox(glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(2.0f, 0.05f, 0.05f), glm::vec4(0.8f, 0.8f, 0.8f, 1.0f)); // Bar
+        drawLocalBox(glm::vec3(-0.9f, 1.0f, 0.0f), glm::vec3(0.1f, 0.4f, 0.4f), glm::vec4(0.1f, 0.1f, 0.1f, 1.0f)); // Weight L
+        drawLocalBox(glm::vec3(0.9f, 1.0f, 0.0f), glm::vec3(0.1f, 0.4f, 0.4f), glm::vec4(0.1f, 0.1f, 0.1f, 1.0f)); // Weight R
+        // Balls
+        drawLocalSphere(glm::vec3(0.0f, 0.2f, 0.3f), 0.2f, glm::vec4(0.9f, 0.4f, 0.1f, 1.0f)); // Basketball
+        drawLocalSphere(glm::vec3(-0.4f, 0.15f, 0.4f), 0.15f, glm::vec4(1.0f, 1.0f, 1.0f, 1.0f)); // Soccer
+    }
+    else if (type == "TECH") {
+        // Desk
+        drawLocalBox(glm::vec3(0.0f, 0.5f, 0.0f), glm::vec3(1.6f, 1.0f, 0.8f), glm::vec4(0.8f, 0.8f, 0.8f, 1.0f));
+        // PC Monitor
+        drawLocalBox(glm::vec3(0.3f, 1.1f, -0.2f), glm::vec3(0.1f, 0.2f, 0.1f), glm::vec4(0.1f, 0.1f, 0.1f, 1.0f)); // Stand
+        drawLocalBox(glm::vec3(0.3f, 1.3f, -0.15f), glm::vec3(0.7f, 0.4f, 0.05f), glm::vec4(0.1f, 0.1f, 0.1f, 1.0f)); // Bezel
+        drawLocalBox(glm::vec3(0.3f, 1.3f, -0.12f), glm::vec3(0.65f, 0.35f, 0.02f), glm::vec4(0.2f, 0.5f, 1.0f, 1.0f), 0.0f, 4); // Glowing Screen
+        // Laptop
+        drawLocalBox(glm::vec3(-0.4f, 1.02f, 0.1f), glm::vec3(0.4f, 0.02f, 0.3f), glm::vec4(0.6f, 0.6f, 0.6f, 1.0f)); // Base
+        drawLocalBox(glm::vec3(-0.4f, 1.15f, -0.05f), glm::vec3(0.4f, 0.25f, 0.02f), glm::vec4(0.1f, 0.1f, 0.1f, 1.0f)); // Screen Back
+        drawLocalBox(glm::vec3(-0.4f, 1.15f, -0.04f), glm::vec3(0.38f, 0.23f, 0.02f), glm::vec4(1.0f, 0.2f, 0.5f, 1.0f), 0.0f, 4); // Laptop Screen
+    }
+    else if (type == "SHOES") {
+        // Tiered Display Stand
+        drawLocalBox(glm::vec3(0.0f, 0.2f, 0.0f), glm::vec3(1.2f, 0.4f, 0.8f), glm::vec4(0.9f, 0.9f, 0.9f, 1.0f));
+        drawLocalBox(glm::vec3(0.0f, 0.6f, -0.2f), glm::vec3(1.2f, 0.4f, 0.4f), glm::vec4(0.8f, 0.8f, 0.8f, 1.0f));
+        // Shoe 1 (Red)
+        drawLocalBox(glm::vec3(-0.3f, 0.45f, 0.2f), glm::vec3(0.2f, 0.1f, 0.3f), glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
+        drawLocalBox(glm::vec3(-0.3f, 0.55f, 0.15f), glm::vec3(0.18f, 0.15f, 0.2f), glm::vec4(0.9f, 0.1f, 0.1f, 1.0f));
+        // Shoe 2 (Blue)
+        drawLocalBox(glm::vec3(0.3f, 0.45f, 0.2f), glm::vec3(0.2f, 0.1f, 0.3f), glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
+        drawLocalBox(glm::vec3(0.3f, 0.55f, 0.15f), glm::vec3(0.18f, 0.15f, 0.2f), glm::vec4(0.1f, 0.3f, 0.9f, 1.0f));
+        // Shoe 3 (Green Top Tier)
+        drawLocalBox(glm::vec3(0.0f, 0.85f, -0.2f), glm::vec3(0.2f, 0.1f, 0.3f), glm::vec4(0.2f, 0.2f, 0.2f, 1.0f));
+        drawLocalBox(glm::vec3(0.0f, 1.0f, -0.25f), glm::vec3(0.18f, 0.3f, 0.2f), glm::vec4(0.2f, 0.8f, 0.2f, 1.0f));
+    }
+    else if (type == "MUSIC") {
+        // Drum Kit
+        drawLocalBox(glm::vec3(0.0f, 0.4f, 0.0f), glm::vec3(0.6f, 0.6f, 0.4f), glm::vec4(0.8f, 0.1f, 0.1f, 1.0f)); // Bass Drum
+        drawLocalBox(glm::vec3(0.0f, 0.4f, 0.21f), glm::vec3(0.62f, 0.62f, 0.05f), glm::vec4(1.0f, 1.0f, 1.0f, 1.0f)); // Rim F
+        drawLocalBox(glm::vec3(0.0f, 0.4f, -0.21f), glm::vec3(0.62f, 0.62f, 0.05f), glm::vec4(1.0f, 1.0f, 1.0f, 1.0f)); // Rim B
+        drawLocalBox(glm::vec3(-0.5f, 0.6f, 0.0f), glm::vec3(0.3f, 0.2f, 0.3f), glm::vec4(0.8f, 0.1f, 0.1f, 1.0f)); // Snare
+        drawLocalBox(glm::vec3(0.5f, 0.45f, 0.0f), glm::vec3(0.05f, 0.9f, 0.05f), glm::vec4(0.7f, 0.7f, 0.7f, 1.0f)); // Cymbal Stand
+        drawLocalBox(glm::vec3(0.5f, 0.9f, 0.0f), glm::vec3(0.4f, 0.02f, 0.4f), glm::vec4(0.9f, 0.8f, 0.2f, 1.0f), 15.0f); // Cymbal
+    }
+    else if (type == "CANDY") {
+        // Gumball Machine
+        drawLocalBox(glm::vec3(0.0f, 0.4f, 0.0f), glm::vec3(0.6f, 0.8f, 0.6f), glm::vec4(0.9f, 0.1f, 0.1f, 1.0f)); // Base
+        drawLocalBox(glm::vec3(0.0f, 0.3f, 0.31f), glm::vec3(0.2f, 0.2f, 0.05f), glm::vec4(0.1f, 0.1f, 0.1f, 1.0f)); // Slot
+        drawLocalSphere(glm::vec3(0.0f, 1.1f, 0.0f), 0.45f, glm::vec4(0.8f, 0.9f, 1.0f, 0.4f), 2); // Glass Globe
+        // Gumballs
+        drawLocalSphere(glm::vec3(0.1f, 0.9f, 0.1f), 0.08f, glm::vec4(1.0f, 0.0f, 0.0f, 1.0f));
+        drawLocalSphere(glm::vec3(-0.1f, 0.95f, 0.0f), 0.08f, glm::vec4(0.0f, 1.0f, 0.0f, 1.0f));
+        drawLocalSphere(glm::vec3(0.0f, 0.85f, -0.1f), 0.08f, glm::vec4(0.0f, 0.0f, 1.0f, 1.0f));
+        drawLocalSphere(glm::vec3(-0.15f, 0.88f, 0.15f), 0.08f, glm::vec4(1.0f, 1.0f, 0.0f, 1.0f));
+        drawLocalSphere(glm::vec3(0.1f, 1.05f, -0.1f), 0.08f, glm::vec4(1.0f, 0.0f, 1.0f, 1.0f));
+        drawLocalBox(glm::vec3(0.0f, 1.55f, 0.0f), glm::vec3(0.3f, 0.1f, 0.3f), glm::vec4(0.9f, 0.1f, 0.1f, 1.0f)); // Cap
+    }
+    else if (type == "GEAR") {
+        // Camping Gear
+        drawLocalBox(glm::vec3(0.0f, 0.1f, 0.0f), glm::vec3(1.6f, 0.2f, 1.6f), glm::vec4(0.2f, 0.5f, 0.2f, 1.0f)); // Tent Base
+        drawLocalBox(glm::vec3(0.0f, 0.6f, 0.0f), glm::vec3(1.2f, 0.8f, 1.2f), glm::vec4(0.8f, 0.4f, 0.1f, 1.0f)); // Tent Body
+        drawLocalBox(glm::vec3(0.0f, 0.5f, 0.61f), glm::vec3(0.4f, 0.6f, 0.05f), glm::vec4(0.1f, 0.1f, 0.1f, 1.0f)); // Door
+        drawLocalBox(glm::vec3(0.0f, 0.25f, 0.0f), glm::vec3(0.4f, 0.1f, 0.8f), glm::vec4(0.2f, 0.4f, 0.8f, 1.0f)); // Sleeping Bag
+        // Campfire
+        drawLocalBox(glm::vec3(-0.5f, 0.1f, 0.8f), glm::vec3(0.4f, 0.05f, 0.4f), glm::vec4(0.3f, 0.3f, 0.3f, 1.0f)); // Stones
+        drawLocalBox(glm::vec3(-0.5f, 0.2f, 0.8f), glm::vec3(0.15f, 0.2f, 0.15f), glm::vec4(1.0f, 0.5f, 0.0f, 1.0f), 45.0f, 4); // Fire
+    }
+}
+
+// ---------------------------------------------------------
+// FSM Struct for Intelligent Avatars
 // ---------------------------------------------------------
 enum NPCBehavior {
     WANDER_MALL,
@@ -724,7 +918,7 @@ int main() {
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3); glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-    GLFWwindow* window = glfwCreateWindow(1280, 720, "Virtual Mall 2.0", NULL, NULL);
+    GLFWwindow* window = glfwCreateWindow(1600, 900, "Virtual Shopping Mall", NULL, NULL);
     glfwMakeContextCurrent(window);
     glfwSetFramebufferSizeCallback(window, [](GLFWwindow*, int w, int h) { glViewport(0, 0, w, h); });
     glfwSetCursorPosCallback(window, mouse_callback);
@@ -784,17 +978,11 @@ int main() {
         glm::vec4(0.7f, 0.1f, 1.0f, 1.0f), glm::vec4(0.9f, 0.8f, 0.3f, 1.0f), glm::vec4(1.0f, 0.5f, 0.8f, 1.0f)
     };
 
-    // FIXED: Brain-equipped specialized FSM shoppers
     std::vector<Shopper> roamingShoppers = {
-        // Shopper 1: Wanders Ground Floor
         {{ -4.0f, 0.0f,   5.0f }, { 0.0f, 0.0f,  1.0f }, glm::vec4(0.2f, 0.8f, 0.9f, 1.0f), 1.5f, 0.0f, WANDER_MALL, {0,0,0}, 0.0f},
-        // Shopper 2: Goes to Escalator and Rides it Up!
         {{  4.0f, 0.0f,   5.0f }, { 0.0f, 0.0f, -1.0f }, glm::vec4(1.0f, 0.5f, 0.0f, 1.0f), 1.6f, 2.0f, GO_TO_ESCALATOR, {1.0f, 1.5f, 1.0f}, 0.0f},
-        // Shopper 3: Wanders 2nd Floor
         {{ -4.0f, 5.0f,  12.0f }, { 0.0f, 0.0f, -1.0f }, glm::vec4(0.3f, 0.9f, 0.4f, 1.0f), 1.4f, 1.5f, WANDER_MALL, {0,0,0}, 0.0f},
-        // Shopper 4: Goes to Elevator and rides it Down!
         {{  4.0f, 5.0f,  -2.0f }, { 0.0f, 0.0f, -1.0f }, glm::vec4(0.8f, 0.8f, 0.2f, 1.0f), 1.5f, 3.5f, GO_TO_ELEVATOR, {0.0f, 6.5f, -22.0f}, 0.0f},
-        // Shopper 5: Browses a specific shop
         {{  0.0f, 0.0f,  18.0f }, { 0.0f, 0.0f, -1.0f }, glm::vec4(0.6f, 0.2f, 0.9f, 1.0f), 1.6f, 4.0f, VISIT_SHOP, {-8.0f, 1.5f, 10.0f}, 0.0f}
     };
 
@@ -816,8 +1004,16 @@ int main() {
         shopIdxLoad++;
     }
 
-    std::cout << "--- VIRTUAL MALL 2.0 ---" << std::endl;
-    std::cout << "FSM Architecture loaded! Watch the orange avatar ride the escalator and the yellow avatar catch the elevator." << std::endl;
+    std::cout << "--- VIRTUAL SHOPPING MALL 2.0 ---" << std::endl;
+    std::cout << "Added custom 3D products in the shops! Watch out for fixed mannequin arms!" << std::endl;
+    std::cout << "Controls:" << std::endl;
+    std::cout << " [W/A/S/D] - Move around" << std::endl;
+    std::cout << " [Space]   - Jump / Fly Up (Drone Mode)" << std::endl;
+    std::cout << " [L-Shift] - Fly Down (Drone Mode)" << std::endl;
+    std::cout << " [V]       - Toggle Drone View (Free Flight)" << std::endl;
+    std::cout << " [N]       - Toggle Day/Night View" << std::endl;
+    std::cout << " [F]       - Toggle Flashlight" << std::endl;
+    std::cout << " [T]       - Toggle Cinematic Tour" << std::endl;
 
     while (!glfwWindowShouldClose(window)) {
         float currentFrame = static_cast<float>(glfwGetTime()); deltaTime = currentFrame - lastFrame; lastFrame = currentFrame; programTime += deltaTime;
@@ -825,7 +1021,14 @@ int main() {
         processInput(window);
         updateDynamics();
 
-        glClearColor(0.01f, 0.01f, 0.03f, 1.0f); glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        // Update clear color based on Day/Night
+        if (isNight) {
+            glClearColor(0.01f, 0.01f, 0.03f, 1.0f);
+        }
+        else {
+            glClearColor(0.55f, 0.75f, 0.95f, 1.0f);
+        }
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         glUseProgram(shaderProgram);
 
         glUniform1f(glGetUniformLocation(shaderProgram, "time"), programTime);
@@ -833,8 +1036,18 @@ int main() {
         glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "projection"), 1, GL_FALSE, glm::value_ptr(glm::perspective(glm::radians(45.0f), 1280.0f / 720.0f, 0.1f, 100.0f)));
         glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "view"), 1, GL_FALSE, glm::value_ptr(glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp)));
 
-        glUniform3f(glGetUniformLocation(shaderProgram, "dirLightDir"), -0.2f, -1.0f, -0.3f);
-        glUniform3f(glGetUniformLocation(shaderProgram, "dirLightColor"), 0.1f, 0.1f, 0.2f);
+        // Pass Day/Night state to Shader
+        glUniform1i(glGetUniformLocation(shaderProgram, "isNight"), isNight);
+
+        // Update Sun/Moon directional light based on Day/Night
+        if (isNight) {
+            glUniform3f(glGetUniformLocation(shaderProgram, "dirLightDir"), -0.2f, -1.0f, -0.3f);
+            glUniform3f(glGetUniformLocation(shaderProgram, "dirLightColor"), 0.1f, 0.1f, 0.2f);
+        }
+        else {
+            glUniform3f(glGetUniformLocation(shaderProgram, "dirLightDir"), -0.3f, -1.0f, -0.2f);
+            glUniform3f(glGetUniformLocation(shaderProgram, "dirLightColor"), 0.8f, 0.8f, 0.8f);
+        }
 
         for (int i = 0; i < 16; i++) {
             glUniform3fv(glGetUniformLocation(shaderProgram, ("pointLightPositions[" + std::to_string(i) + "]").c_str()), 1, glm::value_ptr(pointLightPositions[i]));
@@ -964,7 +1177,6 @@ int main() {
             switch (shopper.currentState) {
             case WANDER_MALL: {
                 glm::vec3 nextPos = shopper.pos + shopper.dir * (shopper.speed * deltaTime);
-                // FIXED: Padded collision bounds so shoulders don't clip walls
                 if (isPositionValid(nextPos.x + (shopper.dir.x * 0.4f), nextPos.y + 1.5f, nextPos.z + (shopper.dir.z * 0.4f))) {
                     shopper.pos = nextPos;
                 }
@@ -999,7 +1211,7 @@ int main() {
                     shopper.pos.z += 2.5f * deltaTime;
                     if (shopper.pos.z >= 0.5f) shopper.currentState = WANDER_MALL;
                 }
-                isWalking = false; // Stand still while riding
+                isWalking = false;
                 break;
             }
             case GO_TO_ELEVATOR: {
@@ -1082,12 +1294,8 @@ int main() {
                 shopper.pos.y = getFloorHeight(shopper.pos.x, shopper.pos.y + 1.5f, shopper.pos.z) - 1.5f;
             }
 
-            if (isWalking) {
-                shopper.walkCycle += deltaTime * shopper.speed * 4.0f;
-            }
-            else {
-                shopper.walkCycle = 0.0f;
-            }
+            if (isWalking) shopper.walkCycle += deltaTime * shopper.speed * 4.0f;
+            else shopper.walkCycle = 0.0f;
 
             float rotY = glm::degrees(atan2(shopper.dir.x, shopper.dir.z));
             drawCharacter(shaderProgram, VAO, shopper.pos, rotY, shopper.color, shopper.walkCycle);
@@ -1129,6 +1337,9 @@ int main() {
                 drawBox(shaderProgram, VAO, glm::vec3(-10.0f, y + 0.5f, z), glm::vec3(3.0f, 1.0f, 2.0f), sColL * 0.5f);
                 drawNeonText(shaderProgram, VAO, "SALE", glm::vec3(-8.4f, y + 1.3f, z), 0.05f, glm::vec4(1.0f, 1.0f, 1.0f, 1.0f), 90.0f);
 
+                // ---> NEW: Render 3D Products in Left Shops
+                drawProducts(shaderProgram, VAO, shopNamesL[shopIdx], glm::vec3(-8.5f, y, z), 90.0f);
+
                 glm::vec3 rPos(10.0f, y + 2.5f, z);
                 drawBox(shaderProgram, VAO, rPos + glm::vec3(3.9f, 0.0f, 0.0f), glm::vec3(0.2f, 5.0f, 10.0f), shopBaseColor);
                 drawBox(shaderProgram, VAO, rPos + glm::vec3(0.0f, 0.0f, -5.0f), glm::vec3(8.0f, 5.0f, 0.2f), shopBaseColor);
@@ -1144,6 +1355,9 @@ int main() {
 
                 drawBox(shaderProgram, VAO, glm::vec3(10.0f, y + 0.5f, z), glm::vec3(3.0f, 1.0f, 2.0f), sColR * 0.5f);
                 drawNeonText(shaderProgram, VAO, "NEW", glm::vec3(8.4f, y + 1.3f, z), 0.05f, glm::vec4(1.0f, 1.0f, 1.0f, 1.0f), -90.0f);
+
+                // ---> NEW: Render 3D Products in Right Shops
+                drawProducts(shaderProgram, VAO, shopNamesR[shopIdx], glm::vec3(8.5f, y, z), -90.0f);
             }
             shopIdx++;
         }
